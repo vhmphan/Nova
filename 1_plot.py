@@ -23,46 +23,50 @@ mp=938.2720813e6 # eV
 me=0.510998e6 # eV
 
 
-def plot_profile():
+# def plot_profile():
 
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
+#     fig=plt.figure(figsize=(10, 8))
+#     ax=plt.subplot(111)
 
-    t, vsh, Rsh, nrg=np.loadtxt("profile.dat",unpack=True,usecols=[0,1,2,3])
+#     t, vsh, Rsh, nrg=np.loadtxt("profile.dat",unpack=True,usecols=[0,1,2,3])
 
-    ax.plot(t,vsh,'g-',linewidth=3.0,label=r'$v_{\rm sh}$')
-    ax.plot(t,Rsh,'k-',linewidth=3.0,label=r'$R_{\rm sh}$')
-    # ax.plot(t,nrg/(1.0e6*0.76*8.41e-58),'r-',linewidth=3.0,label=r'$n_{\rm rg}$')
-    ax.plot(t,nrg,'r-',linewidth=3.0,label=r'$n_{\rm rg}$')
+#     ax.plot(t,vsh,'g-',linewidth=3.0,label=r'$v_{\rm sh}$')
+#     ax.plot(t,Rsh,'k-',linewidth=3.0,label=r'$R_{\rm sh}$')
+#     # ax.plot(t,nrg/(1.0e6*0.76*8.41e-58),'r-',linewidth=3.0,label=r'$n_{\rm rg}$')
+#     ax.plot(t,nrg,'r-',linewidth=3.0,label=r'$n_{\rm rg}$')
 
-    t, vsh=np.loadtxt("1shock_Diesing_vsh.dat",unpack=True,usecols=[0,1])
-    ax.plot(t,vsh,'g--',linewidth=3.0)
+#     t, vsh=np.loadtxt("1shock_Diesing_vsh.dat",unpack=True,usecols=[0,1])
+#     ax.plot(t,vsh,'g--',linewidth=3.0)
 
-    t, Rsh=np.loadtxt("1shock_Diesing_Rsh.dat",unpack=True,usecols=[0,1])
-    ax.plot(t,Rsh,'k--',linewidth=3.0)
+#     t, Rsh=np.loadtxt("1shock_Diesing_Rsh.dat",unpack=True,usecols=[0,1])
+#     ax.plot(t,Rsh,'k--',linewidth=3.0)
 
-    t, nrg=np.loadtxt("1shock_Diesing_nrg.dat",unpack=True,usecols=[0,1])
-    ax.plot(t,nrg,'r--',linewidth=3.0)
+#     t, nrg=np.loadtxt("1shock_Diesing_nrg.dat",unpack=True,usecols=[0,1])
+#     ax.plot(t,nrg,'r--',linewidth=3.0)
 
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    # ax.set_xlim(1.0e-2,1.0e8)
-    ax.set_ylim(1.0e-1,1.0e4)
-    ax.set_xlabel(r'$t\,({\rm day})$',fontsize=fs)
-    # ax.set_ylabel(r'$p^4f(p)$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":22})
-    ax.grid(linestyle='--')
+#     ax.set_xscale('log')
+#     ax.set_yscale('log')
+#     # ax.set_xlim(1.0e-2,1.0e8)
+#     ax.set_ylim(1.0e-1,1.0e4)
+#     ax.set_xlabel(r'$t\,({\rm day})$',fontsize=fs)
+#     # ax.set_ylabel(r'$p^4f(p)$',fontsize=fs)
+#     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+#         label_ax.set_fontsize(fs)
+#     ax.legend(loc='upper right', prop={"size":22})
+#     ax.grid(linestyle='--')
 
-    plt.savefig("fg_profile.png")
+#     plt.savefig("fg_profile.png")
 
+
+# Luminosity function of the optical emission
 def func_LOPT(t):
 
 	LOPT=1.3e39*t**-0.28*(t+0.6)**-1.0
 	
 	return LOPT
 
+
+# Plot luminosity function of the optical emission
 def plot_LOPT():
 
     t=np.linspace(-20,60,81)
@@ -71,10 +75,9 @@ def plot_LOPT():
     ax=plt.subplot(111)
     ax.plot(t,np.log10(func_LOPT(t)),'g--',linewidth=3.0, label=r'{\rm Fit}')
     ax.plot([1.0,1.0],[36,39],'r:')
-    print(func_LOPT(1.0))
 
     # Read the image for data
-    img = mpimg.imread("data_LOPT.png")
+    img = mpimg.imread("Data/data_LOPT.png")
     img_array = np.mean(np.array(img), axis=2)
 
     xmin=-20.0
@@ -97,6 +100,7 @@ def plot_LOPT():
 
     plt.savefig('fg_LOPT.png')
 
+# Plot gamma-ray data
 def plot_gamma(t_day):
 
     filename='gamma.dat'
@@ -114,7 +118,7 @@ def plot_gamma(t_day):
     ax.plot(np.log10(E[10*t_day,:]),np.log10(phi_abs[10*t_day,:]),'r--',linewidth=3.0, label=r'{\rm t=%d\, day}' % t_day)
 
     # Read the image for data    
-    img = mpimg.imread("data_day%d.png" % t_day)
+    img = mpimg.imread("Data/data_day%d.png" % t_day)
     img_array = np.mean(np.array(img), axis=2)
 
     xmin=-1.0
@@ -139,7 +143,9 @@ def plot_gamma(t_day):
 
     plt.savefig('fg_gamma_day%d.png' % t_day)
 
-def plot_Bfield():
+
+#  Plot profiles of shock radius, magnetic field, and maximum energy
+def plot_profile():
 
     filename='profile.dat'
     t, Rsh, Emax, B=np.loadtxt(filename,unpack=True,usecols=[0,2,4,5])
@@ -149,7 +155,7 @@ def plot_Bfield():
     ax.plot(t,4*B,'r--',linewidth=3.0)
 
     # Read the image for data    
-    img = mpimg.imread("data_Bfield.png")
+    img = mpimg.imread("Data/data_Bfield.png")
     img_array = np.mean(np.array(img), axis=2)
 
     xmin=0.0
@@ -175,7 +181,7 @@ def plot_Bfield():
     ax.plot(t,np.sqrt(1.48**2+Rsh**2),'r--',linewidth=3.0)
 
     # Read the image for data    
-    img = mpimg.imread("data_Rsh.png")
+    img = mpimg.imread("Data/data_Rsh.png")
     img_array = np.mean(np.array(img), axis=2)
 
     xmin=0.0
@@ -200,7 +206,7 @@ def plot_Bfield():
     ax.plot(t,np.log10(Emax),'r--',linewidth=3.0)
 
     # Read the image for data    
-    img = mpimg.imread("data_Emax.png")
+    img = mpimg.imread("Data/data_Emax.png")
     img_array = np.mean(np.array(img), axis=2)
 
     xmin=0.0
@@ -223,6 +229,8 @@ def plot_Bfield():
 
     plt.savefig('fg_Emax.png')
 
+
+# Plot the cosmic-ray distribution
 def plot_fEp():
 
     filename='fEp.dat'
@@ -238,17 +246,14 @@ def plot_fEp():
     ax.plot(np.log10(E[10,:]*1.0e-9),np.log10((E[10,:])**2.5*fEp[10,:])+30,'r--',linewidth=3.0, label=r'{\rm t=1\, day}')
     ax.plot(np.log10(E[50,:]*1.0e-9),np.log10((E[50,:])**2.5*fEp[50,:])+30,'r--',linewidth=3.0, label=r'{\rm t=5\, day}')
 
-    print("Hj",np.log10((E[50,0])**3*fEp[50,0])+24)
-
-    # Read the image for gamma-ray data    
-    img = mpimg.imread("data_fEp.png")
+    # Read the image for data    
+    img = mpimg.imread("Data/data_fEp.png")
     img_array = np.mean(np.array(img), axis=2)
 
     xmin=0.0
     xmax=4.0
     ymin=np.log10(4.0e43)
     ymax=48
-    print(int(ymin))
     ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
     ax.set_xticks(np.arange(xmin,xmax+1,1))
     ax.set_yticks(np.arange(int(ymin)+1,ymax+1,1))
@@ -267,13 +272,14 @@ def plot_fEp():
 
     plt.savefig('fg_fEp.png')
 
+
+#  Plot the gamma-ray attenuation
 def plot_abs():
 
     filenameb='gamma.dat'
     t, E, phi, phi_abs, tau_gg=np.loadtxt(filenameb,unpack=True,usecols=[0,1,2,3,4])
     Nt=101
     Nphi=len(phi)
-    print(Nphi)
     t=np.reshape(t, (Nt, int(Nphi/Nt)))
     E=np.reshape(E, (Nt, int(Nphi/Nt)))
     phi=np.reshape(phi, (Nt, int(Nphi/Nt)))
@@ -289,8 +295,8 @@ def plot_abs():
     ax.plot(t[:,121],np.log10(tau_gg[:,121]),'y-',linewidth=3.0, label=r'$E=0.3\,{\rm TeV}$')
     ax.plot(t[:,121],np.log10(np.exp(-tau_gg[:,121])),'y--',linewidth=3.0, label=r'$E=1\,{\rm TeV}$')
 
-    # Read the image for absorpion data
-    img = mpimg.imread("data_abs.png")
+    # Read the image for data
+    img = mpimg.imread("Data/data_abs.png")
     img_array = np.mean(np.array(img), axis=2)
 
     xmin=0.0
@@ -313,7 +319,7 @@ def plot_abs():
 
     plt.savefig('fg_abs.png')
 
-# plot_profile()
+
 plot_LOPT()
 plot_fEp()
 plot_gamma(1)
@@ -321,4 +327,4 @@ plot_gamma(2)
 plot_gamma(3)
 plot_gamma(4)
 plot_gamma(5)
-plot_Bfield()
+plot_profile()
