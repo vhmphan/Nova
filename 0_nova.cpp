@@ -16,6 +16,7 @@ const double sigma_sb=3.5394474508e7;// erg cm^-2 s^-1 K^-4
 const double mp=938.272e6;// eV
 const double mpCGS=1.67262192e-24;// g
 const double qe=1.602176634e-19;// SI unit
+const double qeCGS=4.8032e-10;// CGS unit 
 
 // Smooth Heaviside function
 double func_Heaviside(double x){
@@ -161,6 +162,7 @@ double func_Emax_inte(double *pars_nova, double t){
 // Maximum energy of accelerated protons
 double func_Emax(double *pars_nova, double t){
 
+    double tST=pars_nova[1];
     double Rmin=pars_nova[5]*1.496e13;// cm
     double xip=pars_nova[6];
     double BRG=pars_nova[10];
@@ -175,6 +177,9 @@ double func_Emax(double *pars_nova, double t){
     // double B2=sqrt(8.0*pi*rho*TOPT*1.6022e-12)*1.0e6;// uG
     double eta=0.05;// -> Fraction of shock radius to determine Emax
     double Emax=1.0e15*eta*Rsh*vsh*B2/3.4e28;// eV
+    if(t>=tST){
+        Emax=func_Emax_conf(pars_nova,t);// eV
+    }
 
     // double UB2, UCR;
     // UB2=pow(B2*1.0e-6,2)/(8.0*pi);
@@ -334,7 +339,7 @@ int main(){
 
     double dt_print=scale_t*dt;// day
     double UOPT;// eV cm^-3
-    double rho, vsh, Rsh, Bbg, UCR, UB0, UBT;
+    double rho, vsh, Rsh, Bbg, UCR, nCR;
 
     Ds*=3.086e18;// cm
     Mej*=1.989e33;// g
@@ -353,32 +358,7 @@ int main(){
     double *arr_E=new double[NE];
 
     for(int i=0;i<Nt;i++){
-
         arr_t[i]=i*dt;
-        vsh=func_vsh(pars_nova,arr_t[i]);
-        Rsh=func_Rsh(pars_nova,arr_t[i]);
-        rho=func_rho(pars_nova,func_Rsh(pars_nova,arr_t[i]))/mpCGS;// cm^-3
-        Bbg=BRG*pow(sqrt(Rmin*Rmin+Rsh*Rsh)/(0.35),-2);
-        UCR=xip*mpCGS*rho*pow(vsh*1.0e5,2);// erg/cm^3
-        UB0=pow(Bbg,2)/(4.0*pi);// erg/cm^3
-        UBT=rho*TOPT*1.60218e-12;// erg/cm^3
-
-        output1 << arr_t[i];// day 
-        output1 << " " << vsh;// km/s
-        output1 << " " << Rsh;// au
-        output1 << " " << rho;// cm^-3
-        // output1 << " " << func_rho(pars_nova,func_Rsh(pars_nova,arr_t[i]))*pow(func_vsh(pars_nova,arr_t[i]),2);// cm^-3
-        output1 << " " << func_Emax(pars_nova,arr_t[i])*1.0e-12;// TeV
-        output1 << " " << Bbg;// G
-        // output1 << " " << func_Ialpha_p(delta,epsilon,Emin,func_Emax(pars_nova,arr_t[i]));
-        output1 << " " << func_MSU(pars_nova,arr_t[i]);
-        output1 << " " << func_Emax(pars_nova,arr_t[i])*1.0e-9;// GeV
-        output1 << " " << func_Emax_Bell(pars_nova,arr_t[i])*1.0e-9;// GeV
-        output1 << " " << func_Emax_conf(pars_nova,arr_t[i])*1.0e-9;// GeV
-        output1 << " " << func_Emax_TH07(pars_nova,arr_t[i])*1.0e-9;// GeV
-        output1 << " " << (vsh*1.0e5/3.0e10)*UCR/UB0;
-        output1 << " " << (vsh*1.0e5/3.0e10)*UCR/UBT;
-        output1 << endl;
     }
 
     for(int j=0;j<NE;j++){
@@ -392,11 +372,42 @@ int main(){
 
     NEp=func_NEp_p(pars_nova,arr_E,NE,arr_t,Nt);// eV^-1 cm^-3
 
-    for(int i=0;i<Nt;i+=scale_t){
-        for(int j=0;j<NE;j++){
-            Rsh=func_Rsh(pars_nova,arr_t[i]);
-            output2 << arr_t[i] << " " << arr_E[j] << " " << NEp[i][j]/(pi*pow(Rsh,3)/3.0) << endl;
+    for(int i=0;i<Nt;i++){
+
+        vsh=func_vsh(pars_nova,arr_t[i]);// km/s
+        Rsh=func_Rsh(pars_nova,arr_t[i]);// au
+        rho=func_rho(pars_nova,func_Rsh(pars_nova,arr_t[i]));// g cm^-3
+        Bbg=BRG*pow(sqrt(Rmin*Rmin+Rsh*Rsh)/(0.35),-2);
+        UCR=xip*rho*pow(vsh*1.0e5,2);// erg/cm^3
+
+        nCR=0.0;
+        for(int j=0;j<NE-1;j++){
+            nCR+=NEp[i][j]*(arr_E[j+1]-arr_E[j])/(pi*pow(Rsh*1.496e13,3)/3.0);// cm^-3
         }
+
+        // cout << arr_t[i] << " " << nCR << endl;
+
+        if(i%scale_t==0){
+            for(int j=0;j<NE;j++){
+                output2 << arr_t[i] << " " << arr_E[j] << " " << NEp[i][j]/(pi*pow(Rsh*1.496e13,3)/3.0) << endl;
+            }
+        }
+
+        output1 << arr_t[i];// day 
+        output1 << " " << vsh;// km/s
+        output1 << " " << Rsh;// au
+        output1 << " " << rho/mpCGS;// cm^-3
+        output1 << " " << func_Emax(pars_nova,arr_t[i])*1.0e-12;// TeV
+        output1 << " " << Bbg;// G
+        // output1 << " " << func_Ialpha_p(delta,epsilon,Emin,func_Emax(pars_nova,arr_t[i]));
+        output1 << " " << func_MSU(pars_nova,arr_t[i]);
+        output1 << " " << func_Emax(pars_nova,arr_t[i])*1.0e-9;// GeV
+        output1 << " " << func_Emax_Bell(pars_nova,arr_t[i])*1.0e-9;// GeV
+        output1 << " " << func_Emax_conf(pars_nova,arr_t[i])*1.0e-9;// GeV
+        output1 << " " << func_Emax_TH07(pars_nova,arr_t[i])*1.0e-9;// GeV
+        output1 << " " << qeCGS*nCR*(vsh*1.0e5/3.0e10)*sqrt(4.0*pi/rho);// s^-1 
+        output1 << " " << 8.9e-9*(rho/mpCGS)*pow(TOPT/kB,0.4);// s^-1
+        output1 << endl;
     }
 
     // Gamma-ray spectrum 

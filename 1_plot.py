@@ -28,7 +28,8 @@ tmin, tmax, dt=pars[0,:]
 Emin, Emax, dlogE=pars[2,:]
 Egmin, Egmax, dlogEg=pars[3,:]
 
-dt*=pars[1,1]
+scale_t=pars[1,1]
+dt*=scale_t
 Nt=int((tmax-tmin)/dt)+1
 NEg=int(np.log10(Egmax/Egmin)/dlogEg)+1
 
@@ -170,9 +171,9 @@ def plot_gamma(t_day):
     ax=plt.subplot(111)
 
     t_day+=0.6
-    print("Day",t[int(10*t_day),0])
-    ax.plot(np.log10(E[int(10*t_day),:]),np.log10(phi[int(10*t_day),:]),'r-',linewidth=3.0)
-    ax.plot(np.log10(E[int(10*t_day),:]),np.log10(phi_abs[int(10*t_day),:]),'r--',linewidth=3.0, label=r'{\rm t=%.1f\, day}' % t_day)
+    print("Day",t[int(scale_t*t_day),0])
+    ax.plot(np.log10(E[int(scale_t*t_day),:]),np.log10(phi[int(scale_t*t_day),:]),'r-',linewidth=3.0)
+    ax.plot(np.log10(E[int(scale_t*t_day),:]),np.log10(phi_abs[int(scale_t*t_day),:]),'r--',linewidth=3.0, label=r'{\rm t=%.1f\, day}' % t_day)
 
     # Read the image for data    
     img = mpimg.imread("Data/data_day%d.png" % t_day)
@@ -215,12 +216,12 @@ def plot_gamma_Diesing():
 
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
-    ax.plot(np.log10(E[10,:]),np.log10(phi_abs[10,:]),'r--',linewidth=3.0, label=r'{\rm t=%d\, day}' % 1)
-    ax.plot(np.log10(E[50,:]),np.log10(phi_abs[50,:]),'g--',linewidth=3.0, label=r'{\rm t=%d\, day}' % 5)
-    ax.plot(np.log10(E[50,:]),np.log10(1.0e-9*(E[50,:])**(-0.2)),'k--',linewidth=3.0, label=r'{\rm t=%d\, day}' % 5)
+    ax.plot(np.log10(E[int(scale_t*1.6),:]),np.log10(phi_abs[int(scale_t*1.6),:]),'r--',linewidth=3.0, label=r'{\rm t=%d\, day}' % 1)
+    ax.plot(np.log10(E[int(scale_t*5.6),:]),np.log10(phi_abs[int(scale_t*5.6),:]),'g--',linewidth=3.0, label=r'{\rm t=%d\, day}' % 5)
+    ax.plot(np.log10(E[int(scale_t*5.6),:]),np.log10(1.0e-9*(E[int(scale_t*5.6),:])**(-0.2)),'k--',linewidth=3.0, label=r'{\rm t=%d\, day}' % 5)
 
     # Read the image for data    
-    img = mpimg.imread("Data/data_gamma.png")
+    img = mpimg.imread("Data/data_gamma_Diesing.png")
     img_array = np.mean(np.array(img), axis=2)
 
     xmin=-1.0
@@ -276,10 +277,10 @@ def plot_time_gamma():
     ax.plot(np.log10([3.6,3.6]),[-13.0,-11.0],'r:')
     ax.plot(np.log10([4.6,4.6]),[-13.0,-11.0],'r:')
     ax.plot(np.log10([5.6,5.6]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT*1.0e-3),'k-')
-    ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT_abs*1.0e-3),'k--')
-    ax.plot(np.log10(t[:,0]),np.log10(flux_HESS*1.0e-2),'r-')
-    ax.plot(np.log10(t[:,0]),np.log10(flux_HESS_abs*1.0e-2),'r--')
+    ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT*1.0e-3),'g-')
+    ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT_abs*1.0e-3),'g--')
+    ax.plot(np.log10(t[:,0]),np.log10(flux_HESS),'r-')
+    ax.plot(np.log10(t[:,0]),np.log10(flux_HESS_abs),'r--')
 
     print(E[:,jmin_HESS]*phi_abs[:,jmin_HESS])
 
@@ -477,26 +478,31 @@ def plot_profile():
     plt.savefig('fg_MSU.png')
 
     filename='profile.dat'
-    t, UB0, UBT=np.loadtxt(filename,unpack=True,usecols=[0,11,12])
+    t, Gkmax, Gin=np.loadtxt(filename,unpack=True,usecols=[0,11,12])
 
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
-    ax.plot(t,UB0,'r--',linewidth=3.0,label=r'{\rm Shock}')
-    ax.plot(t,UBT,'g-',linewidth=3.0,label=r'{\rm B-field}')
-    # ax.plot(t,Emax_Bell,'g:',linewidth=3.0,label=r'{\rm Bell Instability}')
-    # ax.plot(t,Emax_conf,'k-',linewidth=3.0,label=r'{\rm Confinement Limit}')
+    # ax.plot(t,Gkmax/(np.sqrt(1.0-fion)),'r--',linewidth=3.0,label=r'{\rm Growth rate}')
+    # ax.plot(t,Gin*(1.0-fion),'g-',linewidth=3.0,label=r'{\rm Damping rate}')
+
+    fion=0.9
+    ax.plot(t,(Gkmax/(np.sqrt(1.0-fion)))/(Gin*(1.0-fion)),'r--',linewidth=3.0,label=r'$f_{\rm ion}=0.9$')
+    fion=0.7
+    ax.plot(t,(Gkmax/(np.sqrt(1.0-fion)))/(Gin*(1.0-fion)),'g--',linewidth=3.0,label=r'$f_{\rm ion}=0.7$')
+    fion=0.5
+    ax.plot(t,(Gkmax/(np.sqrt(1.0-fion)))/(Gin*(1.0-fion)),linestyle='--',color='orange',linewidth=3.0,label=r'$f_{\rm ion}=0.5$')
 
     ax.set_yscale('log')
-    # ax.set_xlim(0,5)
+    ax.set_xlim(0,6)
     # ax.set_ylim(1.0e2,2.0e5)
     ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$U_{\rm sh} \, ({\rm erg/cm^{3}})$',fontsize=fs)
+    ax.set_ylabel(r'$\Gamma_{\rm k_{\rm max}}/\Gamma_{\rm in}$',fontsize=fs)
     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
         label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
+    ax.legend(loc='lower right', prop={"size":fs})
     ax.grid(linestyle='--')
 
-    plt.savefig('fg_Ush.png')
+    plt.savefig('fg_rate.png')
 
 
 # Plot the cosmic-ray distribution
@@ -664,13 +670,13 @@ def plot_abs_HESS():
 
 
 plot_LOPT()
-plot_fEp()
+# plot_fEp()
 plot_gamma(1)
 plot_gamma(2)
 plot_gamma(3)
 plot_gamma(4)
 plot_gamma(5)
-# plot_gamma_Diesing()
+plot_gamma_Diesing()
 plot_profile()
 # plot_abs()
 # plot_abs_HESS()
