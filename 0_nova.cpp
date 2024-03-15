@@ -139,28 +139,8 @@ double func_Emax_conf(double *pars_nova, double t){
     return Emax;
 }
 
-// Maximum energy of accelerated protons from confinement limit
-double func_Emax_inte(double *pars_nova, double t){
-
-
-    double Rmin=pars_nova[5]*1.496e13;// cm
-    double xip=pars_nova[6];
-
-    double vsh, Rsh, rho;
-    vsh=func_vsh(pars_nova,t)*1.0e5;// cm/s 
-    Rsh=func_Rsh(pars_nova,t)*1.496e13;// cm
-    rho=func_rho(pars_nova,Rsh/1.496e13);// g/cm^3
-   
-    double B2=4.0e6*pow(sqrt(Rmin*Rmin+Rsh*Rsh)/(0.35*1.496e13),-2);
-    double eta=0.05;// -> Fraction of shock radius to determine Emax
-    double Emax=1.0e15*eta*Rsh*vsh*B2/3.4e28;// eV
-
-    return Emax;
-
-}
-
 // Maximum energy of accelerated protons
-double func_Emax(double *pars_nova, double t){
+double *func_Emax(double *pars_nova, double *arr_t, int Nt){
 
     double tST=pars_nova[1];
     double Rmin=pars_nova[5]*1.496e13;// cm
@@ -168,28 +148,29 @@ double func_Emax(double *pars_nova, double t){
     double BRG=pars_nova[10];
     double TOPT=pars_nova[11];// eV
 
-    double vsh, Rsh, rho;
-    vsh=func_vsh(pars_nova,t)*1.0e5;// cm/s 
-    Rsh=func_Rsh(pars_nova,t)*1.496e13;// cm
-    rho=func_rho(pars_nova,Rsh/1.496e13);// g/cm^3
-   
-    double B2=BRG*1.0e6*pow(sqrt(Rmin*Rmin+Rsh*Rsh)/(0.35*1.496e13),-2);
+    double vsh, Rsh, rho, B2, B2_bkgr, B2_Bell, Emax_conf;
     // double B2=sqrt(8.0*pi*rho*TOPT*1.6022e-12)*1.0e6;// uG
-    double eta=0.05;// -> Fraction of shock radius to determine Emax
-    double Emax=1.0e15*eta*Rsh*vsh*B2/3.4e28;// eV
-    if(t>=tST){
-        Emax=func_Emax_conf(pars_nova,t);// eV
+    // double eta=0.05;// -> Fraction of shock radius to determine Emax
+    double *arr_Emax=new double[Nt];//1.0e15*eta*Rsh*vsh*B2/3.4e28;// eV
+
+    double dt=arr_t[1]-arr_t[0];
+    arr_Emax[0]=0.0;
+    for(int i=1;i<Nt;i++){
+        vsh=func_vsh(pars_nova,arr_t[i])*1.0e5;// cm/s 
+        Rsh=func_Rsh(pars_nova,arr_t[i])*1.496e13;// cm
+        rho=func_rho(pars_nova,Rsh/1.496e13);// g/cm^3
+        B2_bkgr=BRG*pow(sqrt(Rmin*Rmin+Rsh*Rsh)/(0.35*1.496e13),-2);// G
+        B2_Bell=sqrt(11.0*pi*rho*pow(vsh*xip,2));// G
+        B2=B2_bkgr;//*func_Heaviside(tST-arr_t[i])+B2_Bell*func_Heaviside(arr_t[i]-tST);
+
+        arr_Emax[i]=arr_Emax[i-1]+(dt*86400.0*qeCGS*B2*pow(vsh,2))*6.242e+11/(2.0*pi*3.0e10);
+        Emax_conf=func_Emax_conf(pars_nova,arr_t[i]);
+        if(arr_Emax[i]>Emax_conf){
+            arr_Emax[i]=Emax_conf;
+        }    
     }
 
-    // double UB2, UCR;
-    // UB2=pow(B2*1.0e-6,2)/(8.0*pi);
-    // UCR=xip*rho*pow(vsh,2);
-    // cout << t << " " << rho*1.0e-6/mpCGS << " " << UB2 << endl;
-    // if(UCR>UB2){
-    //     Emax=func_Emax_conf(pars_nova,t);
-    // }
-
-    return Emax;
+    return arr_Emax;
 }
 
 // Function for normalization of the acceleration spectrum in momentum
@@ -216,6 +197,8 @@ double **func_NEp_p(double *pars_nova, double *arr_E, int NE, double *arr_t, int
     double epsilon=pars_nova[8];
     double ter=pars_nova[9];
     double vsh, Rsh, rho, Emax, Ialpha_p;
+    double *arr_Emax=new double[Nt];
+    arr_Emax=func_Emax(pars_nova,arr_t,Nt);
     double *arr_p=new double[NE];
     double *arr_beta=new double[NE];
     for(int j=0;j<NE;j++){
@@ -229,7 +212,7 @@ double **func_NEp_p(double *pars_nova, double *arr_E, int NE, double *arr_t, int
         vsh=func_vsh(pars_nova,arr_t[i])*1.0e5;// cm/s
         Rsh=func_Rsh(pars_nova,arr_t[i])*1.496e13;// cm
         rho=func_rho(pars_nova,Rsh/1.496e13);// g/cm^3
-        Emax=func_Emax(pars_nova,arr_t[i]);// eV
+        Emax=arr_Emax[i];// eV
         Ialpha_p=func_Ialpha_p(delta,epsilon,Emin,Emax);
         
         if(arr_t[i]<=ter){
@@ -270,6 +253,8 @@ double **func_NEp_E(double *pars_nova, double *arr_E, int NE, double *arr_t, int
     double delta=pars_nova[7];
     double epsilon=pars_nova[8];
     double vsh, Rsh, rho, Emax, Ialpha_E;
+    double *arr_Emax=new double[Nt];
+    arr_Emax=func_Emax(pars_nova,arr_t,Nt);
 
     double **NEp=new double*[Nt];
     for(int i=0;i<Nt;i++){
@@ -277,7 +262,7 @@ double **func_NEp_E(double *pars_nova, double *arr_E, int NE, double *arr_t, int
         vsh=func_vsh(pars_nova,arr_t[i])*1.0e5;// cm/s
         Rsh=func_Rsh(pars_nova,arr_t[i])*1.496e13;// cm
         rho=func_rho(pars_nova,Rsh/1.496e13);// g/cm^3
-        Emax=func_Emax(pars_nova,arr_t[i]);// eV
+        Emax=arr_Emax[i];// eV
         Ialpha_E=func_Ialpha_E(delta,epsilon,Emin,Emax);
         
         if(i==0){
@@ -339,7 +324,7 @@ int main(){
 
     double dt_print=scale_t*dt;// day
     double UOPT;// eV cm^-3
-    double rho, vsh, Rsh, Bbg, UCR, nCR;
+    double rho, vsh, Rsh, MSU, Bbg, nCR, UCR;
 
     Ds*=3.086e18;// cm
     Mej*=1.989e33;// g
@@ -356,6 +341,9 @@ int main(){
 
     double *arr_t=new double[Nt];
     double *arr_E=new double[NE];
+    double *arr_vp_p=new double[NE];
+    double *arr_enhancement=new double[NE];
+    double **arr_d_sigma_g=new double*[NE];
 
     for(int i=0;i<Nt;i++){
         arr_t[i]=i*dt;
@@ -363,7 +351,16 @@ int main(){
 
     for(int j=0;j<NE;j++){
         arr_E[j]=Emin*pow(10.0,j*dlogE);
+        arr_vp_p[j]=sqrt(pow(arr_E[j]+mp,2)-mp*mp)/(arr_E[j]+mp);
+        arr_enhancement[j]=func_enhancement(arr_E[j]);
+        arr_d_sigma_g[j]=new double[NEg];
+        for(int jg=0;jg<NEg;jg++){
+            arr_d_sigma_g[j][jg]=func_d_sigma_g(arr_E[j],Egmin*pow(10.0,jg*dlogEg));
+        }
     }
+
+    double *arr_Emax=new double[Nt];
+    arr_Emax=func_Emax(pars_nova,arr_t,Nt);// eV
 
     double **NEp=new double*[Nt];
     for(int i=0;i<Nt;i++){
@@ -397,11 +394,11 @@ int main(){
         output1 << " " << vsh;// km/s
         output1 << " " << Rsh;// au
         output1 << " " << rho/mpCGS;// cm^-3
-        output1 << " " << func_Emax(pars_nova,arr_t[i])*1.0e-12;// TeV
+        output1 << " " << arr_Emax[i]*1.0e-12;// TeV
         output1 << " " << Bbg;// G
         // output1 << " " << func_Ialpha_p(delta,epsilon,Emin,func_Emax(pars_nova,arr_t[i]));
         output1 << " " << func_MSU(pars_nova,arr_t[i]);
-        output1 << " " << func_Emax(pars_nova,arr_t[i])*1.0e-9;// GeV
+        output1 << " " << arr_Emax[i]*1.0e-9;// GeV
         output1 << " " << func_Emax_Bell(pars_nova,arr_t[i])*1.0e-9;// GeV
         output1 << " " << func_Emax_conf(pars_nova,arr_t[i])*1.0e-9;// GeV
         output1 << " " << func_Emax_TH07(pars_nova,arr_t[i])*1.0e-9;// GeV
@@ -416,10 +413,19 @@ int main(){
     double Ebgmin=TOPT*1.0e-2, Ebgmax=TOPT*1.0e2, dlogEbg=0.001;// eV
     int NEbg=int(log10(Ebgmax/Ebgmin)/dlogEbg)+1;
     double *arr_Ebg=new double[NEbg], *fOPT=new double[NEbg];
+    double **arr_sigma_gg=new double*[NEg];
 
     for(int k=0;k<NEbg;k++){
         arr_Ebg[k]=Ebgmin*pow(10.0,k*dlogEbg);
     }
+
+    for(int jg=0;jg<NEg;jg++){
+        arr_sigma_gg[jg]=new double[NEbg];
+        for(int k=0;k<NEbg;k++){
+            arr_sigma_gg[jg][k]=func_sigma_gg(Eg,arr_Ebg[k]);
+        }
+    }
+
 
     for(int i=0;i<Nt;i+=scale_t){
 
@@ -427,6 +433,7 @@ int main(){
         UOPT=func_LOPT(arr_t[i])*6.242e11/(4.0*pi*pow(func_Rsh(pars_nova,arr_t[i])*1.496e13,2)*3.0e10);// eV cm ^⁻3
         fOPT=func_fEtd(UOPT,TOPT,0.0,arr_Ebg,NEbg);// eV^-1 cm^-3
         Rsh=func_Rsh(pars_nova,arr_t[i])*1.496e13;// cm
+        MSU=func_MSU(pars_nova,arr_t[i]);// g
 
         cout << "i = " << i+1 << "/" << Nt << " --> t = " << arr_t[i] << " day" << endl;
 
@@ -436,32 +443,26 @@ int main(){
 
             tau_gg=0.0;
             for(int k=0;k<NEbg-1;k++){
-                tau_gg+=fOPT[k]*func_sigma_gg(Eg,arr_Ebg[k])*func_Rsh(pars_nova,arr_t[i])*1.496e13*(arr_Ebg[k+1]-arr_Ebg[k]);
+                tau_gg+=fOPT[k]*arr_sigma_gg[jg][k]*Rsh*(arr_Ebg[k+1]-arr_Ebg[k]);
             }
 
             phi_PPI=0.0;
-            for(int j=0;j<NE-1;j++){
-                dE=arr_E[j+1]-arr_E[j];
-
-                // Speed of particles 
-                vp_p=sqrt(pow(arr_E[j]+mp,2)-mp*mp)*3.0e10/(arr_E[j]+mp);// cm/s
-                
-                // Pi0 decay
-                phi_PPI+=dE*(NEp[i][j]*vp_p)*func_enhancement(arr_E[j])*func_d_sigma_g(arr_E[j],Eg);
-            }
-
             if(Rsh>0){
+
+                for(int j=0;j<NE-1;j++){
+                    dE=arr_E[j+1]-arr_E[j];
+                    
+                    phi_PPI+=dE*(NEp[i][j]*arr_vp_p[j])*arr_enhancement[j]*arr_d_sigma_g[j][jg];
+                }
+
                 phi_PPI*=1.0/(pi*pow(Rsh,3)/3.0);
-                phi_PPI*=(Mej+func_MSU(pars_nova,arr_t[i]))/(4.0*pi*Ds*Ds*mpCGS);// eV^-1 cm^-2 s^-1
-            }
-            else{
-                phi_PPI=0.0;
+                phi_PPI*=(Mej+MSU)/(4.0*pi*Ds*Ds*mpCGS);// eV^-1 cm^-2 s^-1
             }
 
-            output3 << arr_t[i]; 
-            output3 << " " << Eg*1.0e-9; 
-            output3 << " " << Eg*Eg*phi_PPI*1.6022e-12;
-            output3 << " " << Eg*Eg*phi_PPI*1.6022e-12*exp(-tau_gg);
+            output3 << arr_t[i];// day
+            output3 << " " << Eg*1.0e-9;// GeV 
+            output3 << " " << Eg*Eg*phi_PPI*1.6022e-12;// erg cm^-2 s^-1
+            output3 << " " << Eg*Eg*phi_PPI*1.6022e-12*exp(-tau_gg);// erg cm^-2 s^-1
             output3 << " " << tau_gg;
             output3 << endl;
         }

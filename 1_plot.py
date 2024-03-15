@@ -100,11 +100,12 @@ def custom_function_smooth_decay(x):
 def func_LOPT(t):
 
     # LOPT=(1.0-func_Heaviside(t-0.8))*3.0e37
-    LOPT=2.5e36+func_Heaviside(t-1.0)*(1.3e39*(np.abs(t-0.25))**-0.28*(np.abs(t+0.35))**-1.0)
+    # LOPT=2.5e36+func_Heaviside(t-1.0)*(1.3e39*(np.abs(t-0.25))**-0.28*(np.abs(t+0.35))**-1.0)
     # LOPT=2.0e36*(1.0-func_Heaviside(t-0.6))+1.3e39*func_Heaviside(t-0.6)*(np.abs(t)+0.5)**(-1.28)
     # a = 10  # Controls the steepness of the transition
     # b = 1   # Controls the position of the transition
     # LOPT= 38.8 +a*np.log10(t)
+    LOPT=2.5e36*(1.0-func_Heaviside(t-0.9))+func_Heaviside(t-0.9)*(1.3e39*pow(abs(t-0.25),-0.28)/(abs(t+0.35)))
  
 
     return LOPT
@@ -126,9 +127,9 @@ def plot_LOPT():
     ax=plt.subplot(111)
     ax.plot(t,np.log10(func_LOPT(t)),'r--',linewidth=3.0, label=r'{\rm Fit}')
     # ax.plot(t,func_fit_LOPT(t,popt[0],popt[1],popt[2]),'g--',linewidth=3.0, label=r'{\rm Fit}')
-    ax.plot(t,custom_function_smooth_decay(t),'g--',linewidth=3.0, label=r'{\rm Fit}')        
-    ax.plot([1.0,1.0],[36,39],'r:')
-    print(t,func_LOPT(t))
+    # ax.plot(t,custom_function_smooth_decay(t),'g--',linewidth=3.0, label=r'{\rm Fit}')        
+    # ax.plot([1.0,1.0],[36,39],'r:')
+    # print(t,func_LOPT(t))
 
     # Read the image for data
     img = mpimg.imread("Data/data_LOPT.png")
@@ -199,7 +200,7 @@ def plot_gamma(t_day):
     ax.legend(loc='upper left', prop={"size":fs})
     ax.grid(linestyle='--')
 
-    plt.savefig('fg_gamma_day%d_2.png' % t_day)
+    plt.savefig('fg_gamma_day%d.png' % t_day)
 
 
 # Gamma-ray plot compared to Diesing 2023
@@ -265,6 +266,9 @@ def plot_time_gamma():
     jmin_HESS=int(np.log10(250.0e9/Egmin)/dlogEg)
     jmax_HESS=int(np.log10(2500.0e9/Egmin)/dlogEg)
 
+    print("FERMI band: ",E[0,jmin_FLAT]/1.60218e-3,"-",E[0,jmax_FLAT]/1.60218e-3,"GeV")
+    print("HESS band:  ",E[0,jmin_HESS]/1.60218e-3,"-",E[0,jmax_HESS]/1.60218e-3,"GeV")
+
     flux_FLAT=np.nansum((E[:,jmin_FLAT+1:jmax_FLAT+1]-E[:,jmin_FLAT:jmax_FLAT])*phi[:,jmin_FLAT:jmax_FLAT],axis=1)
     flux_HESS=np.nansum((E[:,jmin_HESS+1:jmax_HESS+1]-E[:,jmin_HESS:jmax_HESS])*phi[:,jmin_HESS:jmax_HESS],axis=1)
     flux_FLAT_abs=np.nansum((E[:,jmin_FLAT+1:jmax_FLAT+1]-E[:,jmin_FLAT:jmax_FLAT])*phi_abs[:,jmin_FLAT:jmax_FLAT],axis=1)
@@ -273,16 +277,16 @@ def plot_time_gamma():
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
     ax.plot(np.log10([1.85,1.85]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10([2.6,2.6]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10([3.6,3.6]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10([4.6,4.6]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10([5.6,5.6]),[-13.0,-11.0],'r:')
+    ax.plot(np.log10([2.85,2.85]),[-13.0,-11.0],'r:')
+    ax.plot(np.log10([3.85,3.85]),[-13.0,-11.0],'r:')
+    ax.plot(np.log10([4.85,4.85]),[-13.0,-11.0],'r:')
+    ax.plot(np.log10([5.85,5.85]),[-13.0,-11.0],'r:')
     ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT*1.0e-3),'g-')
     ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT_abs*1.0e-3),'g--')
     ax.plot(np.log10(t[:,0]),np.log10(flux_HESS),'r-')
     ax.plot(np.log10(t[:,0]),np.log10(flux_HESS_abs),'r--')
 
-    print(E[:,jmin_HESS]*phi_abs[:,jmin_HESS])
+    # print(E[:,jmin_HESS]*phi_abs[:,jmin_HESS])
 
     # Read the image for data    
     # img = mpimg.imread("Data/data_time_gamma.png")
@@ -312,7 +316,7 @@ def plot_time_gamma():
 
     ax.legend()
     ax.set_aspect(0.65)
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_xlabel(r'$t+0.25\, {\rm (day)}$',fontsize=fs)
     ax.set_ylabel(r'${\rm Integrated\, Flux} \, ({\rm erg\, cm^{-2}\, s^{-1}})$',fontsize=fs)
     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
         label_ax.set_fontsize(fs)
@@ -442,7 +446,7 @@ def plot_profile():
     ax.plot(t,Emax,'r--',linewidth=3.0,label=r'{\rm Compressed Background}')
     ax.plot(t,Emax_Bell,'g:',linewidth=3.0,label=r'{\rm Bell Instability}')
     ax.plot(t,Emax_conf,'k-',linewidth=3.0,label=r'{\rm Confinement Limit}')
-    ax.plot(t,Emax_TH07,linestyle=':',color='orange',linewidth=3.0,label=r'{\rm TH07}')
+    # ax.plot(t,Emax_TH07,linestyle=':',color='orange',linewidth=3.0,label=r'{\rm TH07}')
 
     ax.set_yscale('log')
     ax.set_xlim(0,5)
@@ -670,7 +674,7 @@ def plot_abs_HESS():
 
 
 plot_LOPT()
-# plot_fEp()
+plot_fEp()
 plot_gamma(1)
 plot_gamma(2)
 plot_gamma(3)
