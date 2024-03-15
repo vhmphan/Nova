@@ -283,14 +283,102 @@ double **func_NEp_E(double *pars_nova, double *arr_E, int NE, double *arr_t, int
 // Luminosiy function of the nova
 double func_LOPT(double t){
 
-    // double LOPT=2.0e36;
-    // LOPT+=func_Heaviside(x-0.5)*1.3e39*pow(t-0.25,-0.28)/(t+0.35);
-
     double LOPT;
     LOPT=2.5e36*(1.0-func_Heaviside(t-0.9))+func_Heaviside(t-0.9)*(1.3e39*pow(abs(t-0.25),-0.28)/(abs(t+0.35)));
 
     return LOPT;// erg s^-1
 }
+
+// Gamma-ray opacity
+double **func_tau_gg(double *pars_nova, double *arr_Eg, int NEg, double *arr_t, int Nt){
+
+    double UOPT, Rsh;
+    int scale_t=int(pars_nova[12]);
+    double TOPT=pars_nova[11];
+    double Ebgmin=TOPT*1.0e-2, Ebgmax=TOPT*1.0e2, dlogEbg=0.001;// eV
+    int NEbg=int(log10(Ebgmax/Ebgmin)/dlogEbg)+1;
+    double *arr_Ebg=new double[NEbg], *arr_fOPT=new double[NEbg];
+    double **arr_sigma_gg=new double*[NEg];
+    double **arr_tau_gg=new double*[((Nt-1)/scale_t)+1];
+
+    for(int k=0;k<NEbg;k++){
+        arr_Ebg[k]=Ebgmin*pow(10.0,k*dlogEbg);
+    }
+
+    for(int jg=0;jg<NEg;jg++){
+        arr_sigma_gg[jg]=new double[NEbg];
+        for(int k=0;k<NEbg;k++){
+            arr_sigma_gg[jg][k]=func_sigma_gg(arr_Eg[jg],arr_Ebg[k]);
+        }
+    }
+
+    for(int i=0;i<Nt;i+=scale_t){
+        arr_tau_gg[i/scale_t]=new double[NEg];
+
+        Rsh=func_Rsh(pars_nova,arr_t[i])*1.496e13;// cm
+        UOPT=func_LOPT(arr_t[i])*6.242e11/(4.0*pi*pow(Rsh,2)*3.0e10);// eV cm ^⁻3
+        arr_fOPT=func_fEtd(UOPT,TOPT,0.0,arr_Ebg,NEbg);// eV^-1 cm^-3
+
+        for(int jg=0;jg<NEg;jg++){
+            arr_tau_gg[i/scale_t][jg]=0.0;
+            for(int k=0;k<NEbg-1;k++){
+                arr_tau_gg[i/scale_t][jg]+=arr_fOPT[k]*arr_sigma_gg[jg][k]*Rsh*(arr_Ebg[k+1]-arr_Ebg[k]);
+            }
+        }
+    }
+
+    return arr_tau_gg;
+}
+
+// Gamma-ray flux 
+double **func_phi_PPI(double *pars_nova, double *arr_E, int NE, double *arr_Eg, int NEg, double *arr_t, int Nt){
+
+    double Rsh, MSU;
+    int scale_t=int(pars_nova[12]);
+    double Mej=pars_nova[13], Ds=pars_nova[14];
+    double *arr_vp_p=new double[NE];
+    double *arr_enhancement=new double[NE];
+    double **arr_d_sigma_g=new double*[NE];
+    for(int j=0;j<NE;j++){
+        arr_vp_p[j]=sqrt(pow(arr_E[j]+mp,2)-mp*mp)*3.0e10/(arr_E[j]+mp);// cm/s
+        arr_enhancement[j]=func_enhancement(arr_E[j]);
+        arr_d_sigma_g[j]=new double[NEg];
+        for(int jg=0;jg<NEg;jg++){
+            arr_d_sigma_g[j][jg]=func_d_sigma_g(arr_E[j],arr_Eg[jg]);// cm/eV
+        }
+    }
+
+    double **NEp=new double*[Nt];
+    for(int i=0;i<Nt;i++){
+        NEp[i]=new double[NE];
+    }
+
+    NEp=func_NEp_p(pars_nova,arr_E,NE,arr_t,Nt);// eV^-1 cm^-3
+
+    double **arr_phi_PPI=new double*[((Nt-1)/scale_t)+1];
+    for(int i=0;i<Nt;i+=scale_t){
+        arr_phi_PPI[i/scale_t]=new double[NEg];
+        Rsh=func_Rsh(pars_nova,arr_t[i])*1.496e13;// cm
+        MSU=func_MSU(pars_nova,arr_t[i]);// g
+
+        cout << "i = " << i+1 << "/" << Nt << " --> t = " << arr_t[i] << " day" << endl;
+
+        for(int jg=0;jg<NEg;jg++){
+            arr_phi_PPI[i/scale_t][jg]=0.0;
+            if(Rsh>0){
+                for(int j=0;j<NE-1;j++){                    
+                    arr_phi_PPI[i/scale_t][jg]+=(arr_E[j+1]-arr_E[j])*(NEp[i][j]*arr_vp_p[j])*arr_enhancement[j]*arr_d_sigma_g[j][jg];
+                }
+
+                arr_phi_PPI[i/scale_t][jg]*=1.0/(pi*pow(Rsh,3)/3.0);
+                arr_phi_PPI[i/scale_t][jg]*=(Mej+MSU)/(4.0*pi*Ds*Ds*mpCGS);// eV^-1 cm^-2 s^-1
+            }
+        }
+    }
+
+    return arr_phi_PPI;
+}
+
 
 int main(){
 
@@ -330,8 +418,12 @@ int main(){
     Mej*=1.989e33;// g
     TOPT*=kB;// eV  
 
-    double *pars_nova=new double[12];
-    pars_nova[0]=vsh0, pars_nova[1]=tST, pars_nova[2]=alpha, pars_nova[3]=Mdot, pars_nova[4]=vwind, pars_nova[5]=Rmin, pars_nova[6]=xip, pars_nova[7]=delta, pars_nova[8]=epsilon, pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
+    double *pars_nova=new double[15];
+    pars_nova[0]=vsh0, pars_nova[1]=tST, pars_nova[2]=alpha;
+    pars_nova[3]=Mdot, pars_nova[4]=vwind, pars_nova[5]=Rmin;
+    pars_nova[6]=xip, pars_nova[7]=delta, pars_nova[8]=epsilon;
+    pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
+    pars_nova[12]=scale_t, pars_nova[13]=Mej, pars_nova[14]=Ds;
     
     int Nt=int((tmax-tmin)/dt)+1;
     int NE=int(log10(Emax/Emin)/dlogE)+1;
@@ -342,21 +434,18 @@ int main(){
     double *arr_t=new double[Nt];
     double *arr_E=new double[NE];
     double *arr_vp_p=new double[NE];
-    double *arr_enhancement=new double[NE];
-    double **arr_d_sigma_g=new double*[NE];
+    double *arr_Eg=new double[NEg];
 
     for(int i=0;i<Nt;i++){
         arr_t[i]=i*dt;
     }
 
+    for(int jg=0;jg<NEg;jg++){
+        arr_Eg[jg]=Egmin*pow(10.0,jg*dlogEg);
+    }
+
     for(int j=0;j<NE;j++){
         arr_E[j]=Emin*pow(10.0,j*dlogE);
-        arr_vp_p[j]=sqrt(pow(arr_E[j]+mp,2)-mp*mp)/(arr_E[j]+mp);
-        arr_enhancement[j]=func_enhancement(arr_E[j]);
-        arr_d_sigma_g[j]=new double[NEg];
-        for(int jg=0;jg<NEg;jg++){
-            arr_d_sigma_g[j][jg]=func_d_sigma_g(arr_E[j],Egmin*pow(10.0,jg*dlogEg));
-        }
     }
 
     double *arr_Emax=new double[Nt];
@@ -408,62 +497,22 @@ int main(){
     }
 
     // Gamma-ray spectrum 
-    double dE, vp_p, phi_PPI, tau_gg;
-    double Eg;// eV
-    double Ebgmin=TOPT*1.0e-2, Ebgmax=TOPT*1.0e2, dlogEbg=0.001;// eV
-    int NEbg=int(log10(Ebgmax/Ebgmin)/dlogEbg)+1;
-    double *arr_Ebg=new double[NEbg], *fOPT=new double[NEbg];
-    double **arr_sigma_gg=new double*[NEg];
-
-    for(int k=0;k<NEbg;k++){
-        arr_Ebg[k]=Ebgmin*pow(10.0,k*dlogEbg);
+    double **arr_tau_gg=new double*[((Nt-1)/scale_t)+1];
+    double **arr_phi_PPI=new double*[((Nt-1)/scale_t)+1];
+    for(int i=0;i<Nt;i+=scale_t){
+        arr_tau_gg[i/scale_t]=new double[NEg];
+        arr_phi_PPI[i/scale_t]=new double[NEg];
     }
-
-    for(int jg=0;jg<NEg;jg++){
-        arr_sigma_gg[jg]=new double[NEbg];
-        for(int k=0;k<NEbg;k++){
-            arr_sigma_gg[jg][k]=func_sigma_gg(Eg,arr_Ebg[k]);
-        }
-    }
-
+    arr_tau_gg=func_tau_gg(pars_nova,arr_Eg,NEg,arr_t,Nt);
+    arr_phi_PPI=func_phi_PPI(pars_nova,arr_E,NE,arr_Eg,NEg,arr_t,Nt);
 
     for(int i=0;i<Nt;i+=scale_t){
-
-        // Differential number denisty of background photons 
-        UOPT=func_LOPT(arr_t[i])*6.242e11/(4.0*pi*pow(func_Rsh(pars_nova,arr_t[i])*1.496e13,2)*3.0e10);// eV cm ^⁻3
-        fOPT=func_fEtd(UOPT,TOPT,0.0,arr_Ebg,NEbg);// eV^-1 cm^-3
-        Rsh=func_Rsh(pars_nova,arr_t[i])*1.496e13;// cm
-        MSU=func_MSU(pars_nova,arr_t[i]);// g
-
-        cout << "i = " << i+1 << "/" << Nt << " --> t = " << arr_t[i] << " day" << endl;
-
-        Eg=Egmin;// eV
         for(int jg=0;jg<NEg;jg++){
-            Eg=Egmin*pow(10.0,jg*dlogEg);
-
-            tau_gg=0.0;
-            for(int k=0;k<NEbg-1;k++){
-                tau_gg+=fOPT[k]*arr_sigma_gg[jg][k]*Rsh*(arr_Ebg[k+1]-arr_Ebg[k]);
-            }
-
-            phi_PPI=0.0;
-            if(Rsh>0){
-
-                for(int j=0;j<NE-1;j++){
-                    dE=arr_E[j+1]-arr_E[j];
-                    
-                    phi_PPI+=dE*(NEp[i][j]*arr_vp_p[j])*arr_enhancement[j]*arr_d_sigma_g[j][jg];
-                }
-
-                phi_PPI*=1.0/(pi*pow(Rsh,3)/3.0);
-                phi_PPI*=(Mej+MSU)/(4.0*pi*Ds*Ds*mpCGS);// eV^-1 cm^-2 s^-1
-            }
-
             output3 << arr_t[i];// day
-            output3 << " " << Eg*1.0e-9;// GeV 
-            output3 << " " << Eg*Eg*phi_PPI*1.6022e-12;// erg cm^-2 s^-1
-            output3 << " " << Eg*Eg*phi_PPI*1.6022e-12*exp(-tau_gg);// erg cm^-2 s^-1
-            output3 << " " << tau_gg;
+            output3 << " " << arr_Eg[jg]*1.0e-9;// GeV 
+            output3 << " " << pow(arr_Eg[jg],2)*arr_phi_PPI[i/scale_t][jg]*1.6022e-12;// erg cm^-2 s^-1
+            output3 << " " << pow(arr_Eg[jg],2)*arr_phi_PPI[i/scale_t][jg]*1.6022e-12*exp(-arr_tau_gg[i/scale_t][jg]);// erg cm^-2 s^-1
+            output3 << " " << arr_tau_gg[i/scale_t][jg];
             output3 << endl;
         }
     }
