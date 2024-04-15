@@ -12,6 +12,7 @@ from matplotlib.ticker import MultipleLocator
 import matplotlib.image as mpimg
 from matplotlib.ticker import FuncFormatter
 from scipy.optimize import curve_fit
+import time
 
 fs=22
 
