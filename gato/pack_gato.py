@@ -1,15 +1,19 @@
 import numpy as np
+import scipy as sp
 
 me=0.510998e6 # eV
 mp=938.272e6 # eV
+meCGS=9.10938356e-28 # g
+mpCGS=1.67262192e-24 # g
+qeCGS=4.8032e-10 # CGS unit -> Electric charge of proton
+
 kB=8.617333262145e-5 # eV/K
 sigmaT=6.6524e-25 # cm^-2 -> Thompson cross-section
 alpha_f=1.0/137.035999084 # -> Fine structure constant
-meCGS=9.10938356e-28 # g
 sigma_sb=3.5394474508e7 # erg cm^-2 s^-1 K^-4
-qe=4.80320451e-10 # cgs unit
 hP=4.1357e-15 # eV s
 Ktomec2=1.6863699549e-10 # -> To convert temperture T from K/kB to eV/me 
+
 mpi=134.9766e6 # eV
 Tpth=2.0*mpi+(pow(mpi,2)/(2.0*mp)) # eV
 
@@ -17,6 +21,7 @@ Tpth=2.0*mpi+(pow(mpi,2)/(2.0*mp)) # eV
 ############################################################################################
 # Gamma rays from proton-proton interaction -> Kafexhiu et al. 2014
 ############################################################################################
+
 
 # Dimensionless Breit-Wigner distribution.
 def func_fBW(sqrt_s):
@@ -31,6 +36,7 @@ def func_fBW(sqrt_s):
     
     return fBW
 
+
 # Cross-section for p+p -> p+p+pi0.
 def func_sigma_1pi(Tp):
 # Eq. 2,
@@ -43,6 +49,7 @@ def func_sigma_1pi(Tp):
     sigma_1pi=sigma_0*pow(eta,1.95)*(1.0+eta+pow(eta,5))*pow(func_fBW(sqrt_s),1.86) 
     
     return sigma_1pi # m
+
 
 # Cross-section for p+p -> p+p+2pi0.
 def func_sigma_2pi(Tp):
@@ -59,6 +66,7 @@ def func_sigma_2pi(Tp):
     
     return sigma_2pi # m
 
+
 # Proton-proton total inelastic cross-section. 
 def func_sigma_inel(Tp):
 # Eq. 1,
@@ -69,6 +77,7 @@ def func_sigma_inel(Tp):
     sigma_inel[sigma_inel<0.0]=0.0
     
     return sigma_inel # m
+
 
 # Average pi0 multiplicity.
 def func_npi(Tp):
@@ -94,6 +103,7 @@ def func_npi(Tp):
     
     return npi
 
+
 # Pi0 production cross-section.
 def func_sigma_pi(Tp):
 # See paragraph above Table 4,
@@ -108,6 +118,7 @@ def func_sigma_pi(Tp):
     sigma_pi[mask2]=func_sigma_inel(Tp[mask2])*func_npi(Tp[mask2]) 
     
     return sigma_pi # m
+
 
 # Complementary function for the differential cross-section.
 def func_Amax(Tp):
@@ -137,6 +148,7 @@ def func_Amax(Tp):
     
     return Amax # mb/e
 
+
 # Complementary function for the differential cross-section.
 def func_alpha(Tp):
 # Table 5, Eq. 14, and Eq. 15,
@@ -151,6 +163,7 @@ def func_alpha(Tp):
     alpha[mask2]=0.5
 
     return alpha
+
 
 # Complementary function for the differential cross-section.
 def func_beta(Tp):
@@ -199,6 +212,7 @@ def func_gamma(Tp):
 
     return gamma
 
+
 # Complementary function for the differential cross-section.
 def func_F(Tp, Eg):
 # Eq. 11 and Table 5,    
@@ -226,11 +240,10 @@ def func_F(Tp, Eg):
     Xg=(Yg-mpi)/(Yg_max-mpi) 
     C=3.0*mpi/Yg_max 
 
-    print(func_alpha(Tp))
-
     F=np.where(mask, pow(1.0-pow(Xg,func_alpha(Tp)),func_beta(Tp))/pow(1.0+Xg/C,func_gamma(Tp)), 0)
     
     return F
+
 
 # Complementary function for the nuclear enhancement factor.
 def func_GTp(Tp):
@@ -240,6 +253,7 @@ def func_GTp(Tp):
     GTp=1.0+np.log(np.maximum(1.0,func_sigma_inel(Tp)/func_sigma_inel(1.0e12*Tp**0))) 
     
     return GTp
+
 
 # Nuclear enhancement factor. 
 def func_enhancement(Tp):
@@ -256,6 +270,7 @@ def func_enhancement(Tp):
 
     return eps_nucl
 
+
 # Differential cross-section of gamma-ray from pi0 decay.
 def func_d_sigma_g(Tp, Eg):
 # Eq. 8,  
@@ -270,3 +285,38 @@ def func_d_sigma_g(Tp, Eg):
     d_sigma_g=Amax[:,np.newaxis]*func_F(Tp,Eg)*1.0e-27
 
     return d_sigma_g # cm^2/eV
+
+
+###################################################################################################
+# Gamma absorption
+###################################################################################################
+
+
+# Cross section for gamma gamma interaction
+def func_sigma_gg(Eg, Ebg):
+
+    Eg, Ebg=np.meshgrid(Eg, Ebg, indexing='ij')
+
+    s0=Eg*Ebg/(me*me) 
+    sigma_gg=np.zeros_like(Eg) 
+
+    mask=(s0>=1.0)
+    
+    sigma_gg[mask]=(s0[mask]+0.5*np.log(s0[mask])-(1.0/6.0)+(1.0/(2.0*s0[mask])))*np.log(np.sqrt(s0[mask])+np.sqrt(s0[mask]-1.0)) 
+    sigma_gg[mask]+=-(s0[mask]+(4.0/9.0)-(1.0/(9.0*s0[mask])))*np.sqrt(1.0-(1.0/s0[mask])) 
+    sigma_gg[mask]*=1.5*sigmaT/(s0[mask]*s0[mask]) 
+    
+    return sigma_gg # cm^2
+
+
+# Photon density of the background photons from IR thermal dust emissions 
+def func_fEtd(Urad, Trad, sigma, Ebg):
+
+    zeta=sp.special.zeta(4.0+sigma) 
+
+    fEtd=Urad/(pow(Trad,2)*sp.special.gamma(4.0+sigma)*zeta*(np.exp(Ebg/Trad)-1.0)) 
+    fEtd*=pow(Ebg/Trad,2.0+sigma)
+
+    return fEtd # eV^-1 cm^-3
+
+

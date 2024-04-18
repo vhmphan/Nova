@@ -31,13 +31,13 @@ double func_vsh(double *pars_nova, double t){
 // vsh0 (km/s), tST (day), and t(day)
 
     double vsh0=pars_nova[0], tST=pars_nova[1], alpha=pars_nova[2], ter=pars_nova[9], Rsh;
-    double vsh=vsh0;
+    double vsh=0.0;
 
-    if(t>ter){    
+    if(t>=ter){    
         vsh=vsh0;
-        if(t>tST){
-            vsh=vsh0*pow(t/tST,-alpha);
-        }
+    }
+    if(t>tST){
+        vsh=vsh0*pow(t/tST,-alpha);
     }
 
     return vsh;// km/s
@@ -50,12 +50,11 @@ double func_Rsh(double *pars_nova, double t){
     double vsh0=pars_nova[0], tST=pars_nova[1], alpha=pars_nova[2], Rmin=pars_nova[5], ter=pars_nova[9];
     double Rsh=0.0;
 
-    if(t>ter){
+    if(t>=ter){
         Rsh=vsh0*(t-ter);
-        if(t>tST){
-            Rsh=-vsh0*ter;
-            Rsh+=vsh0*tST*(pow((t-ter)/tST,1.0-alpha)-alpha)/(1.0-alpha);
-        }
+    }
+    if(t>tST){
+        Rsh=-vsh0*ter+vsh0*tST*(pow(t/tST,1.0-alpha)-alpha)/(1.0-alpha);
     }
 
     return Rsh*86400.0*6.68e-9;// au
@@ -164,10 +163,10 @@ double *func_Emax(double *pars_nova, double *arr_t, int Nt){
         B2=B2_bkgr;//*func_Heaviside(tST-arr_t[i])+B2_Bell*func_Heaviside(arr_t[i]-tST);
 
         arr_Emax[i]=arr_Emax[i-1]+(dt*86400.0*qeCGS*B2*pow(vsh,2))*6.242e+11/(2.0*pi*3.0e10);
-        Emax_conf=func_Emax_conf(pars_nova,arr_t[i]);
-        if(arr_Emax[i]>Emax_conf){
-            arr_Emax[i]=Emax_conf;
-        }    
+        // Emax_conf=func_Emax_conf(pars_nova,arr_t[i]);
+        // if(arr_Emax[i]>Emax_conf){
+        //     arr_Emax[i]=Emax_conf;
+        // }    
     }
 
     return arr_Emax;
