@@ -459,6 +459,126 @@ def plot_gamma(pars_nova, phi_PPI, Eg, t, t_day):
 
     plt.savefig('fg_gamma_day%d_%s.png' % (t_day, pars_nova[15]))
 
+
+# # Plot time profile of gamma-ray integrated flux
+# def plot_time_gamma(pars_nova, phi_PPI, Eg, t):
+
+#     fig=plt.figure(figsize=(10, 8))
+#     ax=plt.subplot(111)
+
+#     dlogEg=np.log10(Eg[1]/Eg[0])
+
+#     jmin_FLAT=int(np.log10(0.1e9/Eg[0])/dlogEg)
+#     jmax_FLAT=int(np.log10(100.0e9/Eg[0])/dlogEg)
+#     jmin_HESS=int(np.log10(250.0e9/Eg[0])/dlogEg)
+#     jmax_HESS=int(np.log10(2500.0e9/Eg[0])/dlogEg)
+
+#     print("FERMI band: ",Eg[jmin_FLAT]*1.0e-9,"-",Eg[jmax_FLAT]*1.0e-9,"GeV")
+#     print("HESS band:  ",Eg[jmin_HESS]*1.0e-9,"-",Eg[jmax_HESS]*1.0e-9,"GeV")
+
+#     phi_PPI*=Eg[:,np.newaxis]*1.60218e-12
+#     flux_FLAT_PPI=np.nansum((Eg[jmin_FLAT+1:jmax_FLAT+1,np.newaxis]-Eg[jmin_FLAT:jmax_FLAT,np.newaxis])*phi_PPI[jmin_FLAT:jmax_FLAT,:],axis=0)
+#     flux_HESS_PPI=np.nansum((Eg[jmin_HESS+1:jmax_HESS+1,np.newaxis]-Eg[jmin_HESS:jmax_HESS,np.newaxis])*phi_PPI[jmin_HESS:jmax_HESS,:],axis=0)
+
+#     data=np.column_stack((t, flux_FLAT_PPI, flux_HESS_PPI))
+#     np.savetxt('flux.txt', data, fmt='%.2e')
+
+#     print(phi_PPI[100,25])
+#     print(flux_FLAT_PPI[25])
+
+#     vsh=func_vsh(pars_nova,t)*1.0e5 # cm/s
+#     Rsh=func_Rsh(pars_nova,t)*1.496e13 # cm
+#     rho=func_rho(pars_nova,Rsh/1.496e13) # g/cm^3   
+#     test=flux_HESS_PPI[-1]*(rho/rho[-1])**2*(vsh/vsh[-1])**2*(Rsh/Rsh[-1])**3
+
+#     ax.plot(np.log10(t+0.25),np.log10(flux_FLAT_PPI*1.0e-3),'g-',linewidth=3.0,label=r'{\rm FERMI}')
+#     ax.plot(np.log10(t+0.25),np.log10(flux_HESS_PPI),'r-',linewidth=3.0,label=r'{\rm HESS}')
+#     # ax.plot(np.log10(t+0.25),np.log10(test),'g:',linewidth=5.0)
+
+#     t_HESS_raw, flux_HESS_raw=np.loadtxt('Data/data_time_gamma_HESS_raw.dat',unpack=True,usecols=[0,1])
+#     t_HESS_raw=t_HESS_raw.reshape((int(len(flux_HESS_raw)/5),5))
+#     flux_HESS_raw=flux_HESS_raw.reshape((int(len(flux_HESS_raw)/5),5))
+#     xerr_HESS_raw=np.array([t_HESS_raw[:,0]-t_HESS_raw[:,1],t_HESS_raw[:,4]-t_HESS_raw[:,0]])
+#     yerr_HESS_raw=np.array([flux_HESS_raw[:,0]-flux_HESS_raw[:,3],flux_HESS_raw[:,4]-flux_HESS_raw[:,0]])
+
+#     # ax.plot(np.log10(t_HESS_raw[:,0]),np.log10(flux_HESS_raw[:,0]),'rs')
+#     # ax.errorbar(np.log10(t_HESS_raw[:,0]), np.log10(flux_HESS_raw[:,0]), yerr=np.log10(yerr_HESS_raw), xerr=np.log10(xerr_HESS_raw), fmt='o', capsize=5, ecolor='black', elinewidth=2, markerfacecolor='red', markeredgecolor='black', markersize=10, label='HESS')
+
+
+#     # print(flux_HESS_raw[0,0],flux_HESS_raw[0,1],flux_HESS_raw[0,2])
+#     # print(t_HESS_raw[:,0])
+#     print(t_HESS_raw[:,0]-t_HESS_raw[:,1],t_HESS_raw[:,2]-t_HESS_raw[:,0])
+#     print(flux_HESS_raw[:,0]-flux_HESS_raw[:,3],flux_HESS_raw[:,4]-flux_HESS_raw[:,0])
+#     # print(flux_HESS_raw[:,0])
+
+#     filename='gamma.dat'
+#     t, E, phi, phi_abs, tau_gg=np.loadtxt(filename,unpack=True,usecols=[0,1,2,3,4])
+#     Nphi=len(phi)
+#     Nt=151
+#     t=np.reshape(t, (Nt, int(Nphi/Nt)))+0.25
+#     E=np.reshape(E, (Nt, int(Nphi/Nt)))*1.60218e-3 # GeV -> erg
+#     phi=np.reshape(phi, (Nt, int(Nphi/Nt)))/E # cm^-2 s^-1
+#     phi_abs=np.reshape(phi_abs, (Nt, int(Nphi/Nt)))/E # cm^-2 s^-1
+#     tau_gg=np.reshape(tau_gg, (Nt, int(Nphi/Nt)))
+
+#     # print("FERMI band: ",E[0,jmin_FLAT]/1.60218e-3,"-",E[0,jmax_FLAT]/1.60218e-3,"GeV")
+#     # print("HESS band:  ",E[0,jmin_HESS]/1.60218e-3,"-",E[0,jmax_HESS]/1.60218e-3,"GeV")
+
+#     flux_FLAT=np.nansum((E[:,jmin_FLAT+1:jmax_FLAT+1]-E[:,jmin_FLAT:jmax_FLAT])*phi[:,jmin_FLAT:jmax_FLAT],axis=1)
+#     flux_HESS=np.nansum((E[:,jmin_HESS+1:jmax_HESS+1]-E[:,jmin_HESS:jmax_HESS])*phi[:,jmin_HESS:jmax_HESS],axis=1)
+#     flux_FLAT_abs=np.nansum((E[:,jmin_FLAT+1:jmax_FLAT+1]-E[:,jmin_FLAT:jmax_FLAT])*phi_abs[:,jmin_FLAT:jmax_FLAT],axis=1)
+#     flux_HESS_abs=np.nansum((E[:,jmin_HESS+1:jmax_HESS+1]-E[:,jmin_HESS:jmax_HESS])*phi_abs[:,jmin_HESS:jmax_HESS],axis=1)
+
+#     ax.plot(np.log10([1.85,1.85]),[-13.0,-11.0],'r:')
+#     ax.plot(np.log10([2.85,2.85]),[-13.0,-11.0],'r:')
+#     ax.plot(np.log10([3.85,3.85]),[-13.0,-11.0],'r:')
+#     ax.plot(np.log10([4.85,4.85]),[-13.0,-11.0],'r:')
+#     ax.plot(np.log10([5.85,5.85]),[-13.0,-11.0],'r:')
+#     # ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT*1.0e-3),'g-')
+#     # ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT_abs*1.0e-3),'g--')
+#     # ax.plot(np.log10(t[:,0]),np.log10(flux_HESS),'r-')
+#     # ax.plot(np.log10(t[:,0]),np.log10(flux_HESS_abs),'r--')
+
+#     # print(E[:,jmin_HESS]*phi_abs[:,jmin_HESS])
+
+#     # Read the image for data    
+#     # img = mpimg.imread("Data/data_time_gamma.png")
+#     # img_array = np.mean(np.array(img), axis=2)
+
+#     # xmin=np.log10(0.4)
+#     # xmax=np.log10(30.0)
+#     # ymin=-13.0
+#     # ymax=np.log10(2.0e-11)
+#     # ax.set_xlim(-1,xmax)
+#     # ax.set_aspect(0.5)
+
+#     img = mpimg.imread("Data/data_time_gamma_Zheng.png")
+#     img_array = np.mean(np.array(img), axis=2)
+
+#     xmin=np.log10(0.1)
+#     xmax=np.log10(50.0)
+#     ymin=np.log10(4.0e-14)
+#     ymax=np.log10(1.0e-10)
+
+#     ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
+#     ax.set_xticks(np.arange(int(xmin),int(xmax)+1,1))
+#     ax.set_yticks(np.arange(int(ymin),int(ymax),1))
+
+#     ax.xaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
+#     ax.yaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
+
+#     ax.legend()
+#     ax.set_aspect(0.65)
+#     ax.set_xlabel(r'$t+0.25\, {\rm (day)}$',fontsize=fs)
+#     ax.set_ylabel(r'${\rm Integrated\, Flux} \, ({\rm erg\, cm^{-2}\, s^{-1}})$',fontsize=fs)
+#     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+#         label_ax.set_fontsize(fs)
+#     ax.legend(loc='lower left', prop={"size":fs})
+#     ax.grid(linestyle='--')
+
+#     plt.savefig('fg_time_gamma_%s.png' % pars_nova[15])
+
+
 # Plot time profile of gamma-ray integrated flux
 def plot_time_gamma(pars_nova, phi_PPI, Eg, t):
 
@@ -490,79 +610,39 @@ def plot_time_gamma(pars_nova, phi_PPI, Eg, t):
     rho=func_rho(pars_nova,Rsh/1.496e13) # g/cm^3   
     test=flux_HESS_PPI[-1]*(rho/rho[-1])**2*(vsh/vsh[-1])**2*(Rsh/Rsh[-1])**3
 
-    ax.plot(np.log10(t+0.25),np.log10(flux_FLAT_PPI*1.0e-3),'gs',linewidth=5.0,label=r'{\rm FERMI}')
-    ax.plot(np.log10(t+0.25),np.log10(flux_HESS_PPI),'rs',linewidth=5.0,label=r'{\rm HESS}')
-    # ax.plot(np.log10(t+0.25),np.log10(test),'g:',linewidth=5.0)
+    ax.plot(t,flux_HESS_PPI,'r-',linewidth=3.0,label=r'{\rm Model\, HESS\, band}')
+    ax.plot(t,flux_FLAT_PPI*1.0e-3,'g-',linewidth=3.0,label=r'{\rm Model\, FERMI\, band}')
 
-    print(np.where(phi_PPI==0.0))
+    t_HESS_raw, flux_HESS_raw=np.loadtxt('Data/data_time_gamma_HESS_raw.dat',unpack=True,usecols=[0,1])
+    t_HESS_raw=t_HESS_raw-0.25 # Data are chosen at different time orgin than model
+    t_HESS_raw=t_HESS_raw.reshape((int(len(flux_HESS_raw)/5),5))
+    flux_HESS_raw=flux_HESS_raw.reshape((int(len(flux_HESS_raw)/5),5))
+    xerr_HESS_raw=np.array([t_HESS_raw[:,0]-t_HESS_raw[:,1],t_HESS_raw[:,2]-t_HESS_raw[:,0]])
+    yerr_HESS_raw=np.array([flux_HESS_raw[:,0]-flux_HESS_raw[:,3],flux_HESS_raw[:,4]-flux_HESS_raw[:,0]])
+    ax.errorbar(t_HESS_raw[:,0], flux_HESS_raw[:,0], yerr=yerr_HESS_raw, xerr=xerr_HESS_raw, fmt='o', capsize=5, ecolor='black', elinewidth=2, markerfacecolor='red', markeredgecolor='black', markersize=10, label=r'${\rm HESS}$')
 
-    filename='gamma.dat'
-    t, E, phi, phi_abs, tau_gg=np.loadtxt(filename,unpack=True,usecols=[0,1,2,3,4])
-    Nphi=len(phi)
-    Nt=151
-    t=np.reshape(t, (Nt, int(Nphi/Nt)))+0.25
-    E=np.reshape(E, (Nt, int(Nphi/Nt)))*1.60218e-3 # GeV -> erg
-    phi=np.reshape(phi, (Nt, int(Nphi/Nt)))/E # cm^-2 s^-1
-    phi_abs=np.reshape(phi_abs, (Nt, int(Nphi/Nt)))/E # cm^-2 s^-1
-    tau_gg=np.reshape(tau_gg, (Nt, int(Nphi/Nt)))
+    t_FERMI_raw, flux_FERMI_raw=np.loadtxt('Data/data_time_gamma_FERMI_raw.dat',unpack=True,usecols=[0,1])
+    t_FERMI_raw=t_FERMI_raw-0.25 # Data are chosen at different time orgin than model
+    t_FERMI_raw=t_FERMI_raw.reshape((int(len(flux_FERMI_raw)/5),5))
+    flux_FERMI_raw=flux_FERMI_raw.reshape((int(len(flux_FERMI_raw)/5),5))
+    xerr_FERMI_raw=np.array([t_FERMI_raw[:,0]-t_FERMI_raw[:,1],t_FERMI_raw[:,2]-t_FERMI_raw[:,0]])
+    yerr_FERMI_raw=np.array([flux_FERMI_raw[:,0]-flux_FERMI_raw[:,3],flux_FERMI_raw[:,4]-flux_FERMI_raw[:,0]])
+    ax.errorbar(t_FERMI_raw[:,0], flux_FERMI_raw[:,0], yerr=yerr_FERMI_raw, xerr=xerr_FERMI_raw, fmt='o', capsize=5, ecolor='black', elinewidth=2, markerfacecolor='green', markeredgecolor='black', markersize=10, label=r'${\rm FERMI\,(\times 10^{-3})}$')
 
-    # print("FERMI band: ",E[0,jmin_FLAT]/1.60218e-3,"-",E[0,jmax_FLAT]/1.60218e-3,"GeV")
-    # print("HESS band:  ",E[0,jmin_HESS]/1.60218e-3,"-",E[0,jmax_HESS]/1.60218e-3,"GeV")
-
-    flux_FLAT=np.nansum((E[:,jmin_FLAT+1:jmax_FLAT+1]-E[:,jmin_FLAT:jmax_FLAT])*phi[:,jmin_FLAT:jmax_FLAT],axis=1)
-    flux_HESS=np.nansum((E[:,jmin_HESS+1:jmax_HESS+1]-E[:,jmin_HESS:jmax_HESS])*phi[:,jmin_HESS:jmax_HESS],axis=1)
-    flux_FLAT_abs=np.nansum((E[:,jmin_FLAT+1:jmax_FLAT+1]-E[:,jmin_FLAT:jmax_FLAT])*phi_abs[:,jmin_FLAT:jmax_FLAT],axis=1)
-    flux_HESS_abs=np.nansum((E[:,jmin_HESS+1:jmax_HESS+1]-E[:,jmin_HESS:jmax_HESS])*phi_abs[:,jmin_HESS:jmax_HESS],axis=1)
-
-    ax.plot(np.log10([1.85,1.85]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10([2.85,2.85]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10([3.85,3.85]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10([4.85,4.85]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10([5.85,5.85]),[-13.0,-11.0],'r:')
-    ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT*1.0e-3),'g-')
-    ax.plot(np.log10(t[:,0]),np.log10(flux_FLAT_abs*1.0e-3),'g--')
-    ax.plot(np.log10(t[:,0]),np.log10(flux_HESS),'r-')
-    ax.plot(np.log10(t[:,0]),np.log10(flux_HESS_abs),'r--')
-
-    # print(E[:,jmin_HESS]*phi_abs[:,jmin_HESS])
-
-    # Read the image for data    
-    # img = mpimg.imread("Data/data_time_gamma.png")
-    # img_array = np.mean(np.array(img), axis=2)
-
-    # xmin=np.log10(0.4)
-    # xmax=np.log10(30.0)
-    # ymin=-13.0
-    # ymax=np.log10(2.0e-11)
-    # ax.set_xlim(-1,xmax)
-    # ax.set_aspect(0.5)
-
-    img = mpimg.imread("Data/data_time_gamma_Zheng.png")
-    img_array = np.mean(np.array(img), axis=2)
-
-    xmin=np.log10(0.1)
-    xmax=np.log10(50.0)
-    ymin=np.log10(4.0e-14)
-    ymax=np.log10(1.0e-10)
-
-    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
-    ax.set_xticks(np.arange(int(xmin),int(xmax)+1,1))
-    ax.set_yticks(np.arange(int(ymin),int(ymax),1))
-
-    ax.xaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
-    ax.yaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
-
-    ax.legend()
-    ax.set_aspect(0.65)
+    ax.set_xlim(1.0e-1,5.0e1)
+    ax.set_ylim(1.0e-13,3.0e-11)
+    ax.set_xscale('log')
+    ax.set_yscale('log')
     ax.set_xlabel(r'$t+0.25\, {\rm (day)}$',fontsize=fs)
     ax.set_ylabel(r'${\rm Integrated\, Flux} \, ({\rm erg\, cm^{-2}\, s^{-1}})$',fontsize=fs)
     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
         label_ax.set_fontsize(fs)
-    ax.legend(loc='lower left', prop={"size":fs})
+    ax.legend(loc='upper left', prop={"size":fs}, ncols=2)
     ax.grid(linestyle='--')
 
     plt.savefig('fg_time_gamma_%s.png' % pars_nova[15])
 
+ 
 def plot_Rsh(pars_nova, t):
 
     Rsh=func_Rsh(pars_nova,t)
@@ -693,86 +773,85 @@ def plot_Emax(pars_nova, t):
     plt.savefig('fg_Emax_%s.png' % pars_nova[15])
 
 
+    
+
 # Parameters for RS Ophiuchi 2021
 # pars_nova[0]=vsh0, pars_nova[1]=tST, pars_nova[2]=alpha;
 # pars_nova[3]=Mdot, pars_nova[4]=vwind, pars_nova[5]=Rmin;
 # pars_nova[6]=xip, pars_nova[7]=delta, pars_nova[8]=epsilon;
 # pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
 # pars_nova[12]=scale_t, pars_nova[13]=Mej, pars_nova[14]=Ds;
-pars_nova=[4500.0, 2.0, 0.43, 2.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23']
-pars_nova[2]=0.66
-# pars_nova[5]=3.0
-# pars_nova[9]=0.5
-print(pars_nova[10])
+pars_nova=[4500.0, 2.0, 0.667, 5.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23']
+
+tST=np.linspace(1.5,3,3)
 
 # Record the starting time
 start_time = time.time()
 
 # Define the time and energy ranges
-t=np.linspace(0.0,15.0,1501)
+t=np.linspace(0.0,30.0,3001)
 E=np.logspace(8,14,601)
+vp=np.sqrt((E+mp)**2-mp**2)*3.0e10/(E+mp)
+dE=np.append(np.diff(E),0.0)[:,np.newaxis,np.newaxis]
 Eg=E
 
-plot_Rsh(pars_nova,t)
-plot_vsh(pars_nova,t)
-plot_rho(pars_nova,t)
-plot_Emax(pars_nova,t)
+# Gamma-ray cross-section
+eps_nucl=gt.func_enhancement(E)
+d_sigma_g=gt.func_d_sigma_g(E,Eg)
+eps_nucl=eps_nucl[:,np.newaxis,np.newaxis]
+d_sigma_g=d_sigma_g[:,:,np.newaxis] # cm^2 eV^-1
 
-# # data=np.load('phi_PPI.npy')
-# # print(data.shape)
+# Gamma-gamma cross section
+TOPT=kB*pars_nova[11] # eV
+Ebg=np.logspace(np.log10(TOPT*1.0e-2),np.log10(TOPT*1.0e2),1000)
+sigma_gg=gt.func_sigma_gg(Eg,Ebg) # cm^2
+sigma_gg=sigma_gg[:,:,np.newaxis]
+
+# Distance from the nova to Earth
+Ds=pars_nova[14]*3.086e18 # cm
 
 Rsh=func_Rsh(pars_nova,t)*1.496e13 # cm
 Vsh=np.pi*pow(Rsh,3)/3.0 # cm^3
 NEp=func_NEp_p(pars_nova,E,t) #/Vsh[np.newaxis,:] # eV^-1 cm^-3
-MSU=func_MSU(pars_nova,t) # g
+# MSU=func_MSU(pars_nova,t) # g
 rho=func_rho(pars_nova,t) # g cm^-3
 vsh=func_Rsh(pars_nova,t) # km/s
 
-vp=np.sqrt((E+mp)**2-mp**2)*3.0e10/(E+mp)
-JEp=NEp*vp[:,np.newaxis]
-eps_nucl=gt.func_enhancement(E)
-d_sigma_g=gt.func_d_sigma_g(E,Eg)
-
 # Calculate the unabsorbed gamma-ray spectrum
-MSU=MSU[np.newaxis,np.newaxis,:]
+# MSU=MSU[np.newaxis,np.newaxis,:]
 rho=rho[np.newaxis,np.newaxis,:]
+JEp=NEp*vp[:,np.newaxis]
 JEp=JEp[:,np.newaxis,:] # eV^-1 cm^-2 s^-1
-eps_nucl=eps_nucl[:,np.newaxis,np.newaxis]
-d_sigma_g=d_sigma_g[:,:,np.newaxis] # cm^2 eV^-1
-Ds=pars_nova[14]*3.086e18 # cm
 
-dE=np.append(np.diff(E),0.0)[:,np.newaxis,np.newaxis]
 # phi_PPI=np.nansum((MSU/(4.0*np.pi*Ds**2*mpCGS))*(dE*JEp*eps_nucl)*d_sigma_g, axis=0)
 phi_PPI=np.nansum((4.0*rho/(4.0*np.pi*Ds**2*mpCGS))*(dE*JEp*eps_nucl)*d_sigma_g, axis=0)
 
 # Opacity of gamma rays
-TOPT=kB*pars_nova[11] # eV
-Ebg=np.logspace(np.log10(TOPT*1.0e-2),np.log10(TOPT*1.0e2),1000)
 UOPT=func_LOPT(t)*6.242e11/(4.0*np.pi*pow(Rsh,2)*3.0e10) # eV cm^⁻3
 fOPT=gt.func_fEtd(UOPT[np.newaxis,:],TOPT,0.0,Ebg[:,np.newaxis]) # eV^-1 cm^-3
-sigma_gg=gt.func_sigma_gg(Eg,Ebg) # cm^2
-
-data=np.column_stack((t, func_LOPT(t)))
-np.savetxt('LOPT_py.txt', data, fmt='%.2e')
-plot_LOPT(pars_nova)
 
 dEbg=np.append(np.diff(Ebg),0.0)[np.newaxis,:,np.newaxis]
 fOPT=fOPT[np.newaxis,:,:]
-sigma_gg=sigma_gg[:,:,np.newaxis]
 
 tau_gg=np.sum(fOPT*sigma_gg*Rsh[np.newaxis,np.newaxis,:]*dEbg, axis=1)
-# tau_gg=np.zeros_like(tau_gg)
-# print(tau_gg[100,25])
-np.save('phi_PPI.npy', phi_PPI*np.exp(-tau_gg))
+
+np.save('phi_PPI_%s.npy' % pars_nova[15], phi_PPI*np.exp(-tau_gg))
+phi_PPI=np.load('phi_PPI_%s.npy' % pars_nova[15])
 
 # Plot spectra
 # plot_fEp(NEp,E,t)
-plot_gamma(pars_nova,phi_PPI*np.exp(-tau_gg),Eg,t,160)
-# plot_gamma(pars_nova,phi_PPI*np.exp(-tau_gg),Eg,t,260)
-# plot_gamma(pars_nova,phi_PPI*np.exp(-tau_gg),Eg,t,360)
-# plot_gamma(pars_nova,phi_PPI*np.exp(-tau_gg),Eg,t,460)
-plot_gamma(pars_nova,phi_PPI*np.exp(-tau_gg),Eg,t,560)
-plot_time_gamma(pars_nova,phi_PPI*np.exp(-tau_gg),Eg,t)
+plot_gamma(pars_nova,phi_PPI,Eg,t,160)
+# plot_gamma(pars_nova,phi_PPI,Eg,t,260)
+# plot_gamma(pars_nova,phi_PPI,Eg,t,360)
+# plot_gamma(pars_nova,phi_PPI,Eg,t,460)
+plot_gamma(pars_nova,phi_PPI,Eg,t,560)
+plot_time_gamma(pars_nova,phi_PPI,Eg,t)
+
+# plot_Rsh(pars_nova,t)
+# plot_vsh(pars_nova,t)
+# plot_Emax(pars_nova,t)
+# plot_rho(pars_nova,t)
+# plot_LOPT(pars_nova)
 
 # Record the ending time
 end_time=time.time()
