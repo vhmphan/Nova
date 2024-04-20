@@ -15,6 +15,7 @@ from matplotlib.ticker import FuncFormatter
 from scipy.optimize import curve_fit
 import gato.pack_gato as gt
 import time
+from multiprocessing import Pool
 
 fs=22
 
@@ -785,79 +786,10 @@ def plot_Emax(pars_nova, t):
 
     plt.savefig('fg_Emax_%s.png' % pars_nova[15])
 
+def func_phi_PPI(d_sigma_g, sigma_gg, pars_nova, E, Eg, t):
 
-    
-
-# Parameters for RS Ophiuchi 2021
-# pars_nova[0]=vsh0, pars_nova[1]=tST, pars_nova[2]=alpha;
-# pars_nova[3]=Mdot, pars_nova[4]=vwind, pars_nova[5]=Rmin;
-# pars_nova[6]=xip, pars_nova[7]=delta, pars_nova[8]=epsilon;
-# pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
-# pars_nova[12]=scale_t, pars_nova[13]=Mej, pars_nova[14]=Ds;
-pars_nova=[4500.0, 2.0, 0.667, 5.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23']
-tST=np.linspace(1.0,3.0,11)
-Mdot=np.linspace(4.0,6.0,5)*1.0e-7
-ter=np.linspace(-1.0,1.0,11)
-BRG=np.linspace(0.5,1.5,11)
-
-tST, Mdot, ter, BRG=np.meshgrid(tST, Mdot, ter, BRG)
-tST=tST.flatten()
-Mdot=Mdot.flatten()
-ter=ter.flatten()
-BRG=BRG.flatten()
-
-# Record the starting time
-start_time = time.time()
-
-# Define the time and energy ranges
-t=np.linspace(0.0,10.0,1001)
-E=np.logspace(8,14,601)
-vp=np.sqrt((E+mp)**2-mp**2)*3.0e10/(E+mp)
-dE=np.append(np.diff(E),0.0)[:,np.newaxis,np.newaxis]
-Eg=E
-dlogEg=np.log10(Eg[1]/Eg[0])
-
-# Gamma-ray cross-section
-eps_nucl=gt.func_enhancement(E)
-d_sigma_g=gt.func_d_sigma_g(E,Eg)
-eps_nucl=eps_nucl[:,np.newaxis,np.newaxis]
-d_sigma_g=d_sigma_g[:,:,np.newaxis] # cm^2 eV^-1
-
-# Gamma-gamma cross section
-TOPT=kB*pars_nova[11] # eV
-Ebg=np.logspace(np.log10(TOPT*1.0e-2),np.log10(TOPT*1.0e2),1000)
-dEbg=np.append(np.diff(Ebg),0.0)[np.newaxis,:,np.newaxis]
-sigma_gg=gt.func_sigma_gg(Eg,Ebg) # cm^2
-sigma_gg=sigma_gg[:,:,np.newaxis]
-
-# Distance from the nova to Earth
-Ds=pars_nova[14]*3.086e18 # cm
-
-# Limit the range for data
-mask=(t_FERMI_raw<t[-1])
-t_FERMI_raw=t_FERMI_raw[mask]
-flux_FERMI_raw=flux_FERMI_raw[mask]
-yerr_FERMI_raw=yerr_FERMI_raw[mask]
-xerr_FERMI_raw=xerr_FERMI_raw[mask]
-
-mask=(t_HESS_raw<t[-1])
-t_HESS_raw=t_HESS_raw[mask]
-flux_HESS_raw=flux_HESS_raw[mask]
-yerr_HESS_raw=yerr_HESS_raw[mask]
-xerr_HESS_raw=xerr_HESS_raw[mask]
-
-# Array to store all the flux in the parameter space scan
-phi_PPI_pars=np.zeros((len(tST),len(Eg),len(t)))
-
-# Scan parameter space
-chi2=np.zeros_like(tST)
-for i in range(len(tST)):
-    pars_nova[1]=tST[i]
-    pars_nova[3]=Mdot[i]
-    pars_nova[9]=ter[i]
-    pars_nova[10]=BRG[i]
-
-    print(tST[i],Mdot[i],ter[i],BRG[i])
+    # Distance from the nova to Earth
+    Ds=pars_nova[14]*3.086e18 # cm
 
     # Calculate the proton distribution
     Rsh=func_Rsh(pars_nova,t)*1.496e13 # cm
@@ -897,17 +829,93 @@ for i in range(len(tST)):
     flux_FLAT_PPI_interp=interp_func_FLAT(t_FERMI_raw)
     flux_HESS_PPI_interp=interp_func_HESS(t_HESS_raw)
 
-    chi2[i]=np.sum(((flux_FERMI_raw-flux_FLAT_PPI_interp)/yerr_FERMI_raw)**2)
-    chi2[i]=np.sum(((flux_HESS_raw-flux_HESS_PPI_interp)/yerr_HESS_raw)**2)
+    chi2=np.sum(((flux_FERMI_raw-flux_FLAT_PPI_interp)/yerr_FERMI_raw)**2)
+    chi2=np.sum(((flux_HESS_raw-flux_HESS_PPI_interp)/yerr_HESS_raw)**2)
 
-    # print(flux_FLAT_PPI_interp)
-    # print(chi2[i])
+    return chi2
 
-print(tST)
-print(chi2)
-print(BRG)
-print(np.where(chi2==np.min(chi2)))
-print(tST[np.where(chi2==np.min(chi2))], Mdot[np.where(chi2==np.min(chi2))], ter[np.where(chi2==np.min(chi2))], BRG[np.where(chi2==np.min(chi2))])
+# Parameters for RS Ophiuchi 2021
+# pars_nova[0]=vsh0, pars_nova[1]=tST, pars_nova[2]=alpha;
+# pars_nova[3]=Mdot, pars_nova[4]=vwind, pars_nova[5]=Rmin;
+# pars_nova[6]=xip, pars_nova[7]=delta, pars_nova[8]=epsilon;
+# pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
+# pars_nova[12]=scale_t, pars_nova[13]=Mej, pars_nova[14]=Ds;
+pars_init=[4500.0, 2.0, 0.43, 2.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23']
+tST=np.linspace(1.0,3.0,2)
+Mdot=np.linspace(4.0,6.0,2)*1.0e-7
+ter=np.linspace(-1.0,1.0,2)
+BRG=np.linspace(0.5,1.5,2)
+
+tST, Mdot, ter, BRG=np.meshgrid(tST, Mdot, ter, BRG)
+tST=tST.flatten()
+Mdot=Mdot.flatten()
+ter=ter.flatten()
+BRG=BRG.flatten()
+
+# Record the starting time
+start_time = time.time()
+
+# Define the time and energy ranges
+t=np.linspace(0.0,15.0,1501)
+E=np.logspace(8,14,601)
+vp=np.sqrt((E+mp)**2-mp**2)*3.0e10/(E+mp)
+dE=np.append(np.diff(E),0.0)[:,np.newaxis,np.newaxis]
+Eg=E
+dlogEg=np.log10(Eg[1]/Eg[0])
+
+# Gamma-ray production cross-section
+eps_nucl=gt.func_enhancement(E)
+d_sigma_g=gt.func_d_sigma_g(E,Eg)
+eps_nucl=eps_nucl[:,np.newaxis,np.newaxis]
+d_sigma_g=d_sigma_g[:,:,np.newaxis] # cm^2 eV^-1
+
+# Gamma-gamma cross section
+TOPT=kB*pars_init[11] # eV
+Ebg=np.logspace(np.log10(TOPT*1.0e-2),np.log10(TOPT*1.0e2),1000)
+dEbg=np.append(np.diff(Ebg),0.0)[np.newaxis,:,np.newaxis]
+sigma_gg=gt.func_sigma_gg(Eg,Ebg) # cm^2
+sigma_gg=sigma_gg[:,:,np.newaxis]
+
+# Limit the range for data
+mask=(t_FERMI_raw<t[-1])
+t_FERMI_raw=t_FERMI_raw[mask]
+flux_FERMI_raw=flux_FERMI_raw[mask]
+yerr_FERMI_raw=yerr_FERMI_raw[mask]
+xerr_FERMI_raw=xerr_FERMI_raw[mask]
+
+mask=(t_HESS_raw<t[-1])
+t_HESS_raw=t_HESS_raw[mask]
+flux_HESS_raw=flux_HESS_raw[mask]
+yerr_HESS_raw=yerr_HESS_raw[mask]
+xerr_HESS_raw=xerr_HESS_raw[mask]
+
+# Array to store all the flux in the parameter space scan
+phi_PPI_pars=np.zeros((len(tST),len(Eg),len(t)))
+
+# Create the lists of parameters for scanning
+pars_scan=[]
+for i in range(len(tST)):
+    pars_nova=pars_init.copy()
+    pars_nova[1]=tST[i]
+    pars_nova[3]=Mdot[i]
+    pars_nova[9]=ter[i]
+    pars_nova[10]=BRG[i]
+
+    pars_scan.append(pars_nova)
+
+args = [(d_sigma_g, sigma_gg, pars_nova, E, Eg, t) for pars_nova in pars_scan]
+
+# Create a Pool and use starmap to pass arguments to the worker function
+with Pool(processes=20) as pool:
+    results=pool.starmap(func_phi_PPI, args)
+
+results=np.array(results)
+
+# Save chi2 into a txt file
+combined_array = np.column_stack((tST, Mdot, ter, BRG, results))
+
+# Save the combined array to a text file
+np.savetxt('chi2.txt', combined_array, fmt='%.4e', delimiter=' ')
 
 # np.save('phi_PPI_%s.npy' % pars_nova[15], phi_PPI*np.exp(-tau_gg))
 # phi_PPI=np.load('phi_PPI_%s.npy' % pars_nova[15])
