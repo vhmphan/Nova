@@ -328,7 +328,7 @@ def func_JEp_p(pars_nova, E, t):
     dt=(t[1]-t[0])*86400.0
     NEp=np.nancumsum(3.0*np.pi*xip*rho*pow(Rsh,2)*pow(vsh,3)*6.242e11*pow(p/mp,2.0-delta)*np.exp(-pow(p/Emax,epsilon))/(mp*mp*vp*Ialpha_p),axis=1)*dt 
 
-    return NEp*vp[:,np.newaxis]*3.0e10 # eV^-1 cm s^-1
+    return NEp*vp*3.0e10 # eV^-1 cm s^-1
 
 
 # Plot the cosmic-ray distribution
@@ -849,10 +849,10 @@ if __name__ == "__main__":
     # pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
     # pars_nova[12]=scale_t, pars_nova[13]=Mej, pars_nova[14]=Ds;
     pars_init=[4500.0, 2.0, 0.43, 2.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23']
-    tST=np.linspace(1.0,3.0,1)
-    Mdot=np.linspace(4.0,6.0,1)*1.0e-7
-    ter=np.linspace(-1.0,1.0,1)
-    BRG=np.linspace(0.5,1.5,1)
+    tST=np.linspace(1.0,3.0,2)
+    Mdot=np.linspace(4.0,6.0,2)*1.0e-7
+    ter=np.linspace(-1.0,1.0,2)
+    BRG=np.linspace(0.5,1.5,2)
 
     tST, Mdot, ter, BRG=np.meshgrid(tST, Mdot, ter, BRG)
     tST=tST.flatten()
@@ -911,7 +911,7 @@ if __name__ == "__main__":
     args=[(eps_nucl, d_sigma_g, sigma_gg, pars_nova, E, Eg, t) for pars_nova in pars_scan]
 
     # Create a Pool and use starmap to pass arguments to the worker function
-    with Pool(processes=1) as pool:
+    with Pool(processes=20) as pool:
         results=pool.starmap(func_phi_PPI, args)
 
     results=np.array(results)
