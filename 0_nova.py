@@ -16,6 +16,7 @@ from scipy.optimize import curve_fit
 import gato.pack_gato as gt
 import time
 from multiprocessing import Pool
+import os
 
 fs=22
 
@@ -286,7 +287,7 @@ def plot_Emax(Emax, t):
     plt.savefig('fg_Emax_py.png')
 
 # Cumulative spectrum of accelerated protons
-def func_NEp_p(pars_nova, E, t):
+def func_JEp_p(pars_nova, E, t):
 
     xip=pars_nova[6] 
     delta=pars_nova[7] 
@@ -327,7 +328,7 @@ def func_NEp_p(pars_nova, E, t):
     dt=(t[1]-t[0])*86400.0
     NEp=np.nancumsum(3.0*np.pi*xip*rho*pow(Rsh,2)*pow(vsh,3)*6.242e11*pow(p/mp,2.0-delta)*np.exp(-pow(p/Emax,epsilon))/(mp*mp*vp*Ialpha_p),axis=1)*dt 
 
-    return NEp # eV^-1 
+    return NEp*vp[:,np.newaxis]*3.0e10 # eV^-1 cm s^-1
 
 
 # Plot the cosmic-ray distribution
@@ -786,23 +787,28 @@ def plot_Emax(pars_nova, t):
 
     plt.savefig('fg_Emax_%s.png' % pars_nova[15])
 
-def func_phi_PPI(d_sigma_g, sigma_gg, pars_nova, E, Eg, t):
+
+# Function to calculate the gamma-ray spectrum
+def func_phi_PPI(eps_nucl, d_sigma_g, sigma_gg, pars_nova, E, Eg, t):
+
+    # Some basic functions
+    dlogEg=np.log10(Eg[1]/Eg[0])
+    dE=np.append(np.diff(E),0.0)[:,np.newaxis,np.newaxis]
 
     # Distance from the nova to Earth
     Ds=pars_nova[14]*3.086e18 # cm
 
     # Calculate the proton distribution
     Rsh=func_Rsh(pars_nova,t)*1.496e13 # cm
-    Vsh=np.pi*pow(Rsh,3)/3.0 # cm^3
-    NEp=func_NEp_p(pars_nova,E,t) #/Vsh[np.newaxis,:] # eV^-1 cm^-3
+    JEp=func_JEp_p(pars_nova,E,t) # eV^-1 cm s^-1
+    JEp=JEp[:,np.newaxis,:] # eV^-1 cm s^-1
     rho=func_rho(pars_nova,t) # g cm^-3
-    vsh=func_Rsh(pars_nova,t) # km/s
-
-    rho=rho[np.newaxis,np.newaxis,:]
-    JEp=NEp*vp[:,np.newaxis]
-    JEp=JEp[:,np.newaxis,:] # eV^-1 cm^-2 s^-1
+    rho=rho[np.newaxis,np.newaxis,:] # g cm^-3
 
     # Opacity of gamma rays
+    TOPT=kB*pars_nova[11] # eV
+    Ebg=np.logspace(np.log10(TOPT*1.0e-2),np.log10(TOPT*1.0e2),1000)
+    dEbg=np.append(np.diff(Ebg),0.0)[np.newaxis,:,np.newaxis]
     UOPT=func_LOPT(t)*6.242e11/(4.0*np.pi*pow(Rsh,2)*3.0e10) # eV cm^⁻3
     fOPT=gt.func_fEtd(UOPT[np.newaxis,:],TOPT,0.0,Ebg[:,np.newaxis]) # eV^-1 cm^-3
     fOPT=fOPT[np.newaxis,:,:]
@@ -834,111 +840,110 @@ def func_phi_PPI(d_sigma_g, sigma_gg, pars_nova, E, Eg, t):
 
     return chi2
 
-# Parameters for RS Ophiuchi 2021
-# pars_nova[0]=vsh0, pars_nova[1]=tST, pars_nova[2]=alpha;
-# pars_nova[3]=Mdot, pars_nova[4]=vwind, pars_nova[5]=Rmin;
-# pars_nova[6]=xip, pars_nova[7]=delta, pars_nova[8]=epsilon;
-# pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
-# pars_nova[12]=scale_t, pars_nova[13]=Mej, pars_nova[14]=Ds;
-pars_init=[4500.0, 2.0, 0.43, 2.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23']
-tST=np.linspace(1.0,3.0,2)
-Mdot=np.linspace(4.0,6.0,2)*1.0e-7
-ter=np.linspace(-1.0,1.0,2)
-BRG=np.linspace(0.5,1.5,2)
+if __name__ == "__main__":
 
-tST, Mdot, ter, BRG=np.meshgrid(tST, Mdot, ter, BRG)
-tST=tST.flatten()
-Mdot=Mdot.flatten()
-ter=ter.flatten()
-BRG=BRG.flatten()
+    # Parameters for RS Ophiuchi 2021
+    # pars_nova[0]=vsh0, pars_nova[1]=tST, pars_nova[2]=alpha;
+    # pars_nova[3]=Mdot, pars_nova[4]=vwind, pars_nova[5]=Rmin;
+    # pars_nova[6]=xip, pars_nova[7]=delta, pars_nova[8]=epsilon;
+    # pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
+    # pars_nova[12]=scale_t, pars_nova[13]=Mej, pars_nova[14]=Ds;
+    pars_init=[4500.0, 2.0, 0.43, 2.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23']
+    tST=np.linspace(1.0,3.0,1)
+    Mdot=np.linspace(4.0,6.0,1)*1.0e-7
+    ter=np.linspace(-1.0,1.0,1)
+    BRG=np.linspace(0.5,1.5,1)
 
-# Record the starting time
-start_time = time.time()
+    tST, Mdot, ter, BRG=np.meshgrid(tST, Mdot, ter, BRG)
+    tST=tST.flatten()
+    Mdot=Mdot.flatten()
+    ter=ter.flatten()
+    BRG=BRG.flatten()
 
-# Define the time and energy ranges
-t=np.linspace(0.0,15.0,1501)
-E=np.logspace(8,14,601)
-vp=np.sqrt((E+mp)**2-mp**2)*3.0e10/(E+mp)
-dE=np.append(np.diff(E),0.0)[:,np.newaxis,np.newaxis]
-Eg=E
-dlogEg=np.log10(Eg[1]/Eg[0])
+    # Record the starting time
+    start_time = time.time()
 
-# Gamma-ray production cross-section
-eps_nucl=gt.func_enhancement(E)
-d_sigma_g=gt.func_d_sigma_g(E,Eg)
-eps_nucl=eps_nucl[:,np.newaxis,np.newaxis]
-d_sigma_g=d_sigma_g[:,:,np.newaxis] # cm^2 eV^-1
+    # Define the time and energy ranges
+    t=np.linspace(0.0,15.0,1501)
+    E=np.logspace(8,14,601)
+    Eg=E
 
-# Gamma-gamma cross section
-TOPT=kB*pars_init[11] # eV
-Ebg=np.logspace(np.log10(TOPT*1.0e-2),np.log10(TOPT*1.0e2),1000)
-dEbg=np.append(np.diff(Ebg),0.0)[np.newaxis,:,np.newaxis]
-sigma_gg=gt.func_sigma_gg(Eg,Ebg) # cm^2
-sigma_gg=sigma_gg[:,:,np.newaxis]
+    # Gamma-ray production cross-section
+    eps_nucl=gt.func_enhancement(E)
+    d_sigma_g=gt.func_d_sigma_g(E,Eg)
+    eps_nucl=eps_nucl[:,np.newaxis,np.newaxis]
+    d_sigma_g=d_sigma_g[:,:,np.newaxis] # cm^2 eV^-1
 
-# Limit the range for data
-mask=(t_FERMI_raw<t[-1])
-t_FERMI_raw=t_FERMI_raw[mask]
-flux_FERMI_raw=flux_FERMI_raw[mask]
-yerr_FERMI_raw=yerr_FERMI_raw[mask]
-xerr_FERMI_raw=xerr_FERMI_raw[mask]
+    # Gamma-gamma cross section
+    TOPT=kB*pars_init[11] # eV
+    Ebg=np.logspace(np.log10(TOPT*1.0e-2),np.log10(TOPT*1.0e2),1000)
+    dEbg=np.append(np.diff(Ebg),0.0)[np.newaxis,:,np.newaxis]
+    sigma_gg=gt.func_sigma_gg(Eg,Ebg) # cm^2
+    sigma_gg=sigma_gg[:,:,np.newaxis]
 
-mask=(t_HESS_raw<t[-1])
-t_HESS_raw=t_HESS_raw[mask]
-flux_HESS_raw=flux_HESS_raw[mask]
-yerr_HESS_raw=yerr_HESS_raw[mask]
-xerr_HESS_raw=xerr_HESS_raw[mask]
+    # Limit the range for data
+    mask=(t_FERMI_raw<t[-1])
+    t_FERMI_raw=t_FERMI_raw[mask]
+    flux_FERMI_raw=flux_FERMI_raw[mask]
+    yerr_FERMI_raw=yerr_FERMI_raw[mask]
+    xerr_FERMI_raw=xerr_FERMI_raw[mask]
 
-# Array to store all the flux in the parameter space scan
-phi_PPI_pars=np.zeros((len(tST),len(Eg),len(t)))
+    mask=(t_HESS_raw<t[-1])
+    t_HESS_raw=t_HESS_raw[mask]
+    flux_HESS_raw=flux_HESS_raw[mask]
+    yerr_HESS_raw=yerr_HESS_raw[mask]
+    xerr_HESS_raw=xerr_HESS_raw[mask]
 
-# Create the lists of parameters for scanning
-pars_scan=[]
-for i in range(len(tST)):
-    pars_nova=pars_init.copy()
-    pars_nova[1]=tST[i]
-    pars_nova[3]=Mdot[i]
-    pars_nova[9]=ter[i]
-    pars_nova[10]=BRG[i]
+    # Array to store all the flux in the parameter space scan
+    phi_PPI_pars=np.zeros((len(tST),len(Eg),len(t)))
 
-    pars_scan.append(pars_nova)
+    # Create the lists of parameters for scanning
+    pars_scan=[]
+    for i in range(len(tST)):
+        pars_nova=pars_init.copy()
+        pars_nova[1]=tST[i]
+        pars_nova[3]=Mdot[i]
+        pars_nova[9]=ter[i]
+        pars_nova[10]=BRG[i]
 
-args = [(d_sigma_g, sigma_gg, pars_nova, E, Eg, t) for pars_nova in pars_scan]
+        pars_scan.append(pars_nova)
 
-# Create a Pool and use starmap to pass arguments to the worker function
-with Pool(processes=20) as pool:
-    results=pool.starmap(func_phi_PPI, args)
+    args=[(eps_nucl, d_sigma_g, sigma_gg, pars_nova, E, Eg, t) for pars_nova in pars_scan]
 
-results=np.array(results)
+    # Create a Pool and use starmap to pass arguments to the worker function
+    with Pool(processes=1) as pool:
+        results=pool.starmap(func_phi_PPI, args)
 
-# Save chi2 into a txt file
-combined_array = np.column_stack((tST, Mdot, ter, BRG, results))
+    results=np.array(results)
 
-# Save the combined array to a text file
-np.savetxt('chi2.txt', combined_array, fmt='%.4e', delimiter=' ')
+    # Save chi2 into a txt file
+    combined_array = np.column_stack((tST, Mdot, ter, BRG, results))
 
-# np.save('phi_PPI_%s.npy' % pars_nova[15], phi_PPI*np.exp(-tau_gg))
-# phi_PPI=np.load('phi_PPI_%s.npy' % pars_nova[15])
+    # Save the combined array to a text file
+    np.savetxt('chi2.txt', combined_array, fmt='%.4e', delimiter=' ')
 
-# Plot spectra
-# plot_fEp(NEp,E,t)
-# plot_gamma(pars_nova,phi_PPI,Eg,t,160)
-# plot_gamma(pars_nova,phi_PPI,Eg,t,260)
-# plot_gamma(pars_nova,phi_PPI,Eg,t,360)
-# plot_gamma(pars_nova,phi_PPI,Eg,t,460)
-# plot_gamma(pars_nova,phi_PPI,Eg,t,560)
-# plot_time_gamma(pars_nova,phi_PPI,Eg,t)
+    # np.save('phi_PPI_%s.npy' % pars_nova[15], phi_PPI*np.exp(-tau_gg))
+    # phi_PPI=np.load('phi_PPI_%s.npy' % pars_nova[15])
 
-# plot_Rsh(pars_nova,t)
-# plot_vsh(pars_nova,t)
-# plot_Emax(pars_nova,t)
-# plot_rho(pars_nova,t)
-# plot_LOPT(pars_nova)
+    # Plot spectra
+    # plot_fEp(NEp,E,t)
+    # plot_gamma(pars_nova,phi_PPI,Eg,t,160)
+    # plot_gamma(pars_nova,phi_PPI,Eg,t,260)
+    # plot_gamma(pars_nova,phi_PPI,Eg,t,360)
+    # plot_gamma(pars_nova,phi_PPI,Eg,t,460)
+    # plot_gamma(pars_nova,phi_PPI,Eg,t,560)
+    # plot_time_gamma(pars_nova,phi_PPI,Eg,t)
 
-# Record the ending time
-end_time=time.time()
+    # plot_Rsh(pars_nova,t)
+    # plot_vsh(pars_nova,t)
+    # plot_Emax(pars_nova,t)
+    # plot_rho(pars_nova,t)
+    # plot_LOPT(pars_nova)
 
-# Calculate the elapsed time
-elapsed_time=end_time-start_time
+    # Record the ending time
+    end_time=time.time()
 
-print("Elapsed time:", elapsed_time, "seconds")
+    # Calculate the elapsed time
+    elapsed_time=end_time-start_time
+
+    print("Elapsed time:", elapsed_time, "seconds")
