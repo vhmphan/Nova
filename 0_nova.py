@@ -460,8 +460,8 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
     # ax.plot(np.log10(E[int(scale_t*t_day),:]),np.log10(phi[int(scale_t*t_day),:]),'r-',linewidth=3.0)
     # ax.plot(np.log10(E[int(scale_t*t_day),:]),np.log10(phi_abs[int(scale_t*t_day),:]),'r--',linewidth=3.0, label=r'{\rm t=%.1f\, day}' % t_day)
 
+    ax.plot(np.log10(Eg*1.0e-9),np.log10(Eg**2*phi_PPI[:,it]*1.6022e-12/(0.5*(np.exp(-1.1*tau_gg[:,it])+np.exp(-6.3*tau_gg[:,it])))),'g:',linewidth=5.0)
     ax.plot(np.log10(Eg*1.0e-9),np.log10(Eg**2*phi_PPI[:,it]*1.6022e-12),'g-',linewidth=5.0)
-    ax.plot(np.log10(Eg*1.0e-9),np.log10(Eg**2*phi_PPI[:,it]*np.exp(-tau_gg[:,it])*1.6022e-12),'g:',linewidth=5.0)
 
     # Read the image for data    
     img = mpimg.imread("Data/data_day%d.png" % t_day)
@@ -831,11 +831,12 @@ def func_phi_PPI(eps_nucl, d_sigma_g, sigma_gg, pars_nova, E, Eg, t):
 
     # Calculate the gamma-ray spectrum
     phi_PPI=np.nansum((4.0*rho/(4.0*np.pi*Ds**2*mpCGS))*(dE*JEp*eps_nucl)*d_sigma_g, axis=0)
-    phi_PPI=phi_PPI*(0.5*(np.exp(-1.1*tau_gg)+np.exp(-6.3*tau_gg)))
+    phi_PPI=phi_PPI*(0.5*(np.exp(-1.13*tau_gg)+np.exp(-4.45*tau_gg)))
     # phi_PPI*=np.exp(-tau_gg)
 
     if(it_interp==1):
         plot_gamma(pars_nova,phi_PPI,tau_gg,Eg,t,160)
+        plot_gamma(pars_nova,phi_PPI,tau_gg,Eg,t,360)
         plot_gamma(pars_nova,phi_PPI,tau_gg,Eg,t,560)
     plot_time_gamma(pars_nova,phi_PPI,tau_gg,Eg,t_interp)
 
@@ -871,10 +872,10 @@ if __name__ == "__main__":
     Mdot=np.array([5.0e-7]) #np.linspace(4.0,6.0,11)*1.0e-7
     ter=np.array([-0.2]) #np.linspace(-1.0,1.0,11)
     BRG=np.array([1.5]) #np.linspace(0.5,1.5,11)
-    # tST=np.linspace(1.0,4.0,16)
-    # Mdot=np.linspace(4.0,6.0,11)*1.0e-7
-    # ter=np.linspace(-1.0,1.0,11)
-    # BRG=np.linspace(0.5,1.5,11)
+    # tST=np.linspace(1.0,3.0,11)
+    # Mdot=np.linspace(4.0,6.0,3)*1.0e-7
+    # ter=np.linspace(-0.4,0.0,3)
+    # BRG=np.linspace(0.5,1.5,3)
 
     tST, Mdot, ter, BRG=np.meshgrid(tST, Mdot, ter, BRG)
     tST=tST.flatten()
@@ -929,16 +930,16 @@ if __name__ == "__main__":
 
     args=[(eps_nucl, d_sigma_g, sigma_gg, pars_nova, E, Eg, t) for pars_nova in pars_scan]
 
-    # Create a Pool and use starmap to pass arguments to the worker function
-    with Pool(processes=10) as pool:
-        results=pool.starmap(func_phi_PPI, args)
+    # # Create a Pool and use starmap to pass arguments to the worker function
+    # with Pool(processes=1) as pool:
+    #     results=pool.starmap(func_phi_PPI, args)
 
-    results=np.array(results)
-    print(tST[np.where(results==np.min(results))],Mdot[np.where(results==np.min(results))],ter[np.where(results==np.min(results))],BRG[np.where(results==np.min(results))])
+    # results=np.array(results)
+    # print(tST[np.where(results==np.min(results))],Mdot[np.where(results==np.min(results))],ter[np.where(results==np.min(results))],BRG[np.where(results==np.min(results))])
 
-    # Save chi2 into a txt file
-    combined_array=np.column_stack((tST, Mdot, ter, BRG, results))
-    np.savetxt('chi2.txt', combined_array, fmt='%.4e', delimiter=' ')
+    # # Save chi2 into a txt file
+    # combined_array=np.column_stack((tST, Mdot, ter, BRG, results))
+    # np.savetxt('chi2.txt', combined_array, fmt='%.4e', delimiter=' ')
 
     # Plot the best fit parameters
     pars_nova[16]=1
