@@ -47,11 +47,9 @@ flux_FERMI_raw=flux_FERMI_raw[:,0]
 # xerr_FERMI_raw=np.array([t_FERMI_raw[:,0]-t_FERMI_raw[:,1],t_FERMI_raw[:,2]-t_FERMI_raw[:,0]])
 # yerr_FERMI_raw=np.array([flux_FERMI_raw[:,0]-flux_FERMI_raw[:,3],flux_FERMI_raw[:,4]-flux_FERMI_raw[:,0]])
 
-
 # Define a custom tick formatter to display 10^x
 def log_tick_formatter(x, pos):
     return r'$10^{%d}$' % int(x)
-
 
 # Function for interpolation
 def log_interp1d(xx, yy, kind='linear'):
@@ -67,7 +65,6 @@ def log_interp1d(xx, yy, kind='linear'):
 def func_Heaviside(x):
     return 0.5*(1+np.tanh(10*x))
 
-
 # Optical luminosiy function of the nova
 def func_LOPT(t):
 # t (day)
@@ -78,7 +75,6 @@ def func_LOPT(t):
     LOPT[mask]=2.5e36
 
     return LOPT;# erg s^-1
-
 
 # Optical luminosity function as modelled from Metzger et al. 2014
 def func_LOPT_M14(pars_nova, t):
@@ -96,7 +92,6 @@ def func_LOPT_M14(pars_nova, t):
     LOPT=2.5e36+0.5*Lsh*(1.0-np.exp(-tau_X))
 
     return LOPT
-
 
 # Plot luminosity function of the optical emission
 def plot_LOPT(pars_nova):
@@ -137,7 +132,6 @@ def plot_LOPT(pars_nova):
 
     plt.savefig('fg_LOPT_py.png')
 
-
 # Nova shock speed and radius from HESS paper
 t_HESS_model, vsh_HESS_model=np.loadtxt('vsh_HESS.dat',unpack=True,usecols=[0,1])
 func_vsh_HESS=sp.interpolate.interp1d(t_HESS_model,vsh_HESS_model,kind='linear',fill_value='extrapolate')
@@ -173,7 +167,6 @@ def func_vsh(pars_nova, t):
 
     return vsh # km/s
 
-
 # Nova shock radius
 def func_Rsh(pars_nova, t):
 # vsh0 (km/s), tST (day), Rmin (au), and t(day)
@@ -198,7 +191,6 @@ def func_Rsh(pars_nova, t):
 
     return Rsh*86400.0*6.68e-9 # au
 
-
 # Density profile of the red giant wind
 def func_rho(pars_nova, r):
 # Mdot (Msol/yr), vwind (km/s), and r (au)    
@@ -211,7 +203,6 @@ def func_rho(pars_nova, r):
     rho=Mdot/(4.0*np.pi*vwind*pow(Rmin+r*1.496e13,2)) 
 
     return rho # g/cm^3
-
 
 # Swept-up mass of the nova shock
 def func_MSU(pars_nova, t):
@@ -230,7 +221,6 @@ def func_MSU(pars_nova, t):
     MSU[mask]=Mdot*(1.989e33/(365.0*86400.0))*(Rsh[mask]-Rmin*np.arctan(Rsh[mask]/Rmin))*1.496e13/(vwind*1.0e5)
 
     return MSU # g
-
 
 # Acceleration rate of protons
 def func_dE_acc(pars_nova, E, t):
@@ -251,40 +241,69 @@ def func_dE_acc(pars_nova, E, t):
 
     return dEdt # eV/s
 
-# Plot Emax of protons as a function of time
-def plot_Emax(Emax, t):
-    
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-    ax.plot(t,np.log10(Emax*1.0e-12),'k-.',linewidth=3.0)
+# Adiabatic energy loss rate
+def func_dE_adi(pars_nova, E, t):
 
-    filename='profile.dat'
-    t, Rsh, Emax, B=np.loadtxt(filename,unpack=True,usecols=[0,2,4,5])
-    ax.plot(t,np.log10(Emax),'g:',linewidth=3.0)
+    tST=pars_nova[1] # day
+    alpha=pars_nova[2]
+    Rmin=pars_nova[5]*1.496e13 # cm
+    vsh=func_vsh(pars_nova,t)*1.0e5 # cm/s
+    Rsh=func_Rsh(pars_nova,t)*1.496e13 # cm
+    p=np.sqrt((E+mp)**2-mp**2)
+    t=np.array(t)
 
-    # Read the image for data    
-    img = mpimg.imread("Data/data_Emax.png")
-    img_array = np.mean(np.array(img), axis=2)
+    dEdt=-0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2))
 
-    xmin=0.0
-    xmax=5.0
-    ymin=-2.0
-    ymax=1.0
-    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
-    ax.set_yticks(np.arange(ymin,ymax+1,1))
+    if(t>tST):
+        dEdt+=-0.2*(p**2/(E+mp))*(2.0*alpha/(t*86400.0))
 
-    ax.yaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
+    return dEdt # eV/s
 
-    ax.legend()
-    ax.set_aspect(1.2)
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$E_{\rm max} \, ({\rm TeV})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
+# # Injection spectra at the shock
+# def func_fEp_p(pars_nova, E, t):
 
-    plt.savefig('fg_Emax_py.png')
+#     xip=pars_nova[6] 
+#     delta=pars_nova[7] 
+#     epsilon=pars_nova[8] 
+#     ter=pars_nova[9] 
+
+#     # Solve for the maximum energy over time
+#     sol=solve_ivp(lambda tp,Emax:(func_dE_acc(pars_nova,Emax,tp)+func_dE_adi(pars_nova,Emax,tp)),(ter,t[-1]),[0.0],method='RK45',dense_output=True)
+#     Emax=((sol.sol(t)[0]).T*86400.0)[np.newaxis,:]
+
+#     # Get the nomalization for the accelerated spectrum
+#     xmin=np.sqrt(pow(E[0]+mp,2)-mp*mp)/mp 
+#     xmax=np.sqrt(pow(E[-1]+mp,2)-mp*mp)/mp
+#     x=np.logspace(np.log10(xmin),np.log10(xmax),5000)
+
+#     dx=(x[1:-1]-x[0:-2])[:,np.newaxis]
+#     x=x[0:-2][:,np.newaxis]
+#     Ialpha_p=np.sum(pow(x,4.0-delta)*np.exp(-pow(x*mp/Emax,epsilon))*dx/np.sqrt(1.0+x*x),axis=0)
+
+#     # Get the momentum and speed 
+#     p=np.sqrt(pow(E+mp,2)-mp*mp)
+#     vp=(p/(E+mp))
+#     NEp=np.zeros((len(E),len(t)))
+
+#     # Get all the shock dynamics related quantities
+#     vsh=func_vsh(pars_nova,t)*1.0e5 # cm/s
+#     Rsh=func_Rsh(pars_nova,t)*1.496e13 # cm
+#     rho=func_rho(pars_nova,Rsh/1.496e13) # g/cm^3
+
+#     # Change the dimension to make the integral    
+#     p=p[:,np.newaxis]
+#     vp=vp[:,np.newaxis]
+#     Rsh=Rsh[np.newaxis,:]
+#     vsh=vsh[np.newaxis,:]
+#     rho=rho[np.newaxis,:]
+#     Ialpha_p=Ialpha_p[np.newaxis,:]
+
+#     fEp=3.0*np.pi*xip*rho*pow(Rsh,2)*pow(vsh,3)*6.242e11*pow(p/mp,2.0-delta)*np.exp(-pow(p/Emax,epsilon))/(mp*mp*vp*Ialpha_p)
+
+#     # dt=(t[1]-t[0])*86400.0
+#     # NEp=np.nancumsum(3.0*np.pi*xip*rho*pow(Rsh,2)*pow(vsh,3)*6.242e11*pow(p/mp,2.0-delta)*np.exp(-pow(p/Emax,epsilon))/(mp*mp*vp*Ialpha_p),axis=1)*dt 
+
+#     return fEp
 
 # Cumulative spectrum of accelerated protons
 def func_JEp_p(pars_nova, E, t):
@@ -295,7 +314,7 @@ def func_JEp_p(pars_nova, E, t):
     ter=pars_nova[9] 
 
     # Solve for the maximum energy over time
-    sol=solve_ivp(lambda tp,Emax:func_dE_acc(pars_nova,Emax,tp),(t[0],t[-1]),[0.0],method='RK45',dense_output=True)
+    sol=solve_ivp(lambda tp,Emax:(func_dE_acc(pars_nova,Emax,tp)+func_dE_adi(pars_nova,Emax,tp)),(ter,t[-1]),[0.0],method='RK45',dense_output=True)
     Emax=((sol.sol(t)[0]).T*86400.0)[np.newaxis,:]
 
     # Get the nomalization for the accelerated spectrum
@@ -328,8 +347,10 @@ def func_JEp_p(pars_nova, E, t):
     dt=(t[1]-t[0])*86400.0
     NEp=np.nancumsum(3.0*np.pi*xip*rho*pow(Rsh,2)*pow(vsh,3)*6.242e11*pow(p/mp,2.0-delta)*np.exp(-pow(p/Emax,epsilon))/(mp*mp*vp*Ialpha_p),axis=1)*dt 
 
-    return NEp*vp*3.0e10 # eV^-1 cm s^-1
+    # sol=solve_ivp(lambda tp,NEp:func_fEp_p(pars_nova,Ep,tp),(ter,t[-1]),[0.0],method='RK45',dense_output=True)
+    # Emax=((sol.sol(t)[0]).T*86400.0)[np.newaxis,:]
 
+    return NEp*vp*3.0e10 # eV^-1 cm s^-1
 
 # Plot the cosmic-ray distribution
 def plot_fEp(NEp, E, t):
@@ -382,7 +403,6 @@ def plot_fEp(NEp, E, t):
     ax.grid(linestyle='--')
 
     plt.savefig('fg_fEp_py.png')
-
 
 # #  Plot the gamma-ray attenuation
 # def plot_abs():
@@ -460,7 +480,7 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
     # ax.plot(np.log10(E[int(scale_t*t_day),:]),np.log10(phi[int(scale_t*t_day),:]),'r-',linewidth=3.0)
     # ax.plot(np.log10(E[int(scale_t*t_day),:]),np.log10(phi_abs[int(scale_t*t_day),:]),'r--',linewidth=3.0, label=r'{\rm t=%.1f\, day}' % t_day)
 
-    ax.plot(np.log10(Eg*1.0e-9),np.log10(Eg**2*phi_PPI[:,it]*1.6022e-12/(0.5*(np.exp(-1.1*tau_gg[:,it])+np.exp(-6.3*tau_gg[:,it])))),'g:',linewidth=5.0)
+    ax.plot(np.log10(Eg*1.0e-9),np.log10(Eg**2*phi_PPI[:,it]*1.6022e-12/(0.5*(np.exp(-1.13*tau_gg[:,it])+np.exp(-4.45*tau_gg[:,it])))),'g:',linewidth=5.0)
     ax.plot(np.log10(Eg*1.0e-9),np.log10(Eg**2*phi_PPI[:,it]*1.6022e-12),'g-',linewidth=5.0)
 
     # Read the image for data    
@@ -488,7 +508,6 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
     ax.grid(linestyle='--')
 
     plt.savefig('fg_gamma_day%d_%s.png' % (t_day, pars_nova[15]))
-
 
 # # Plot time profile of gamma-ray integrated flux
 # def plot_time_gamma(pars_nova, phi_PPI, Eg, t):
@@ -608,7 +627,6 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
 
 #     plt.savefig('fg_time_gamma_%s.png' % pars_nova[15])
 
-
 # Plot time profile of gamma-ray integrated flux
 def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
 
@@ -630,7 +648,7 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
 
     if(pars_nova[16]==1):
         # phi_PPI*=np.exp(tau_gg)
-        phi_PPI*=1.0/(0.5*(np.exp(-1.1*tau_gg)+np.exp(-6.3*tau_gg)))
+        phi_PPI*=1.0/(0.5*(np.exp(-1.13*tau_gg)+np.exp(-4.45*tau_gg)))
         flux_FLAT_PPI_noabs=1.0e-3*1.60218e-12*np.nansum((Eg[jmin_FLAT+1:jmax_FLAT+1,np.newaxis]-Eg[jmin_FLAT:jmax_FLAT,np.newaxis])*Eg[jmin_FLAT:jmax_FLAT,np.newaxis]*phi_PPI[jmin_FLAT:jmax_FLAT,:],axis=0)
         flux_HESS_PPI_noabs=1.60218e-12*np.nansum((Eg[jmin_HESS+1:jmax_HESS+1,np.newaxis]-Eg[jmin_HESS:jmax_HESS,np.newaxis])*Eg[jmin_HESS:jmax_HESS,np.newaxis]*phi_PPI[jmin_HESS:jmax_HESS,:],axis=0)
         ax.plot(t,flux_HESS_PPI_noabs,'r--',linewidth=3.0)
@@ -670,112 +688,24 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
     plt.savefig('Results/fg_time_gamma_%s_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[15], pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
     plt.close()
  
-
-def plot_Rsh(pars_nova, t):
-
-    Rsh=func_Rsh(pars_nova,t)
-
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-    ax.plot(t,Rsh,'r--',linewidth=3.0)
-    # ax.plot(t,np.sqrt(1.48**2+Rsh**2),'r--',linewidth=3.0)
-
-    t, Rsh=np.loadtxt('profile.dat',unpack=True,usecols=[0,2])
-    ax.plot(t,Rsh,'k:',linewidth=3.0)
-
-    # Read the image for data    
-    img = mpimg.imread("Data/data_Rsh.png")
-    img_array = np.mean(np.array(img), axis=2)
-
-    xmin=0.0
-    xmax=5.0
-    ymin=0.0
-    ymax=14.0
-    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
-
-    ax.legend()
-    ax.set_aspect(0.3)
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$R_{\rm sh} \, ({\rm au})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper left', prop={"size":fs})
-    ax.grid(linestyle='--')
-
-    plt.savefig('fg_Rsh_%s.png' % pars_nova[15])
-
-
-def plot_vsh(pars_nova, t):
-
-    vsh=func_vsh(pars_nova,t)
-
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-    ax.plot(t,vsh,'r--',linewidth=3.0)
-
-    t, vsh=np.loadtxt('profile.dat',unpack=True,usecols=[0,1])
-    ax.plot(t,vsh,'k:',linewidth=3.0)
-
-    # ax.set_xlim(0,5)
-    # ax.set_ylim(1.0e1,2.0e5)
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
-
-    plt.savefig('fg_vsh_%s.png' % pars_nova[15])
-
-
-def plot_rho(pars_nova, t):
-
-    Rsh=func_Rsh(pars_nova,t) # au
-    rho=func_rho(pars_nova,Rsh)/mpCGS # cm^-3
-
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-    ax.plot(t,rho,'r--',linewidth=3.0)
-
-    t, rho=np.loadtxt('profile.dat',unpack=True,usecols=[0,3])
-    ax.plot(t,rho,'k:',linewidth=3.0)
-
-    # # Read the image for data    
-    # img = mpimg.imread("Data/data_Rsh.png")
-    # img_array = np.mean(np.array(img), axis=2)
-
-    # xmin=0.0
-    # xmax=5.0
-    # ymin=0.0
-    # ymax=14.0
-    # ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
-
-    ax.legend()
-    # ax.set_aspect(0.3)
-    ax.set_yscale('log')
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$n_{\rm w} \, ({\rm cm^{-3}})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper left', prop={"size":fs})
-    ax.grid(linestyle='--')
-
-    plt.savefig('fg_rho_%s.png' % pars_nova[15])
-
-
 def plot_Emax(pars_nova, t):
+
+    ter=pars_nova[9] # day
 
     # Solve for the maximum energy over time
     sol=solve_ivp(lambda tp,Emax:func_dE_acc(pars_nova,Emax,tp),(t[0],t[-1]),[0.0],method='RK45',dense_output=True)
     Emax=((sol.sol(t)[0]).T*86400.0)
 
+    sol=solve_ivp(lambda tp,Emax:(func_dE_acc(pars_nova,Emax,tp)+func_dE_adi(pars_nova,Emax,tp)),(t[0],t[-1]),[0.0],method='RK45',dense_output=True)
+    Emax_adi=((sol.sol(t)[0]).T*86400.0)
 
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
     ax.plot(t,Emax*1.0e-12,'r--',linewidth=3.0)
+    ax.plot(t,Emax_adi*1.0e-12,'g:',linewidth=3.0)
 
-    t, Emax=np.loadtxt('profile.dat',unpack=True,usecols=[0,4])
-    ax.plot(t,Emax,'k:',linewidth=3.0)
+    # t, Emax=np.loadtxt('profile.dat',unpack=True,usecols=[0,4])
+    # ax.plot(t,Emax,'k:',linewidth=3.0)
 
     # # Read the image for data    
     # img = mpimg.imread("Data/data_Rsh.png")
@@ -799,6 +729,28 @@ def plot_Emax(pars_nova, t):
     ax.grid(linestyle='--')
 
     plt.savefig('fg_Emax_%s.png' % pars_nova[15])
+
+
+def plot_dE(pars_nova, E, t):
+
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+
+    print(func_dE_adi(pars_nova,E,t))
+
+    ax.plot(t,func_dE_acc(pars_nova,E,t),'r--',linewidth=3.0)
+    ax.plot(t,-func_dE_adi(pars_nova,E,t),'g:',linewidth=3.0)
+
+    ax.set_yscale('log')
+    # ax.set_ylim(1.0e-3,1.0e1)
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_ylabel(r'${\rm d}E/{\rm d}t \, ({\rm eV/s})$',fontsize=fs)
+    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+        label_ax.set_fontsize(fs)
+    ax.legend(loc='upper left', prop={"size":fs})
+    ax.grid(linestyle='--')
+
+    plt.savefig('fg_dE.png')
 
 
 # Function to calculate the gamma-ray spectrum
@@ -867,11 +819,11 @@ if __name__ == "__main__":
     # pars_nova[6]=xip, pars_nova[7]=delta, pars_nova[8]=epsilon;
     # pars_nova[9]=ter, pars_nova[10]=BRG, pars_nova[11]=TOPT;
     # pars_nova[12]=scale_t, pars_nova[13]=Mej, pars_nova[14]=Ds;
-    pars_init=[4500.0, 2.0, 0.66, 2.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 0.8e4, 10, 2.0e-9, 1.4e3, 'DM23', 50]
-    tST=np.array([1.8]) #np.linspace(1.0,4.0,16)
-    Mdot=np.array([5.0e-7]) #np.linspace(4.0,6.0,11)*1.0e-7
-    ter=np.array([-0.2]) #np.linspace(-1.0,1.0,11)
-    BRG=np.array([1.5]) #np.linspace(0.5,1.5,11)
+    pars_init=[4500.0, 2.0, 0.66, 2.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23', 50]
+    tST=np.array([1.8]) 
+    Mdot=np.array([5.0e-7])
+    ter=np.array([0.0]) 
+    BRG=np.array([1.5]) 
     # tST=np.linspace(1.0,3.0,11)
     # Mdot=np.linspace(4.0,6.0,3)*1.0e-7
     # ter=np.linspace(-0.4,0.0,3)
@@ -942,8 +894,8 @@ if __name__ == "__main__":
     # np.savetxt('chi2.txt', combined_array, fmt='%.4e', delimiter=' ')
 
     # Plot the best fit parameters
-    pars_nova[16]=1
-    results=func_phi_PPI(eps_nucl,d_sigma_g,sigma_gg,pars_nova,E,Eg,t)
+    # pars_nova[16]=1
+    # results=func_phi_PPI(eps_nucl,d_sigma_g,sigma_gg,pars_nova,E,Eg,t)
 
     # # Plot HESS model
     # pars_nova[9]=0.0
@@ -964,9 +916,11 @@ if __name__ == "__main__":
 
     # plot_Rsh(pars_nova,t)
     # plot_vsh(pars_nova,t)
-    # plot_Emax(pars_nova,t)
+    plot_Emax(pars_nova,t)
     # plot_rho(pars_nova,t)
     # plot_LOPT(pars_nova)
+
+    # plot_dE(pars_nova,1.0e12,t)
 
     # Record the ending time
     end_time=time.time()

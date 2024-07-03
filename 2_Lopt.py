@@ -178,3 +178,24 @@ Rs=200.0*6.95e10
 Ts=10780.0
 print(4.0*Rs**2*sigma_SB*(Ts)**4)
 
+import gato.pack_nova as nv
+
+
+
+pars_init=[4500.0, 2.0, 0.66, 2.0e-7, 20.0, 1.48, 0.1, 4.4, 1.0, 0.0, 1.0, 1.0e4, 10, 2.0e-9, 1.4e3, 'DM23', 50]
+tST=np.array([1.8]) 
+Mdot=np.array([5.0e-7])
+ter=np.array([-0.2]) 
+BRG=np.array([1.5]) 
+
+pars_nova=pars_init.copy()
+pars_nova[1]=tST
+pars_nova[3]=Mdot
+pars_nova[9]=ter
+pars_nova[10]=BRG
+
+t=np.linspace(0,20,100)
+
+nv.plot_Emax(pars_nova,t)
+nv.plot_vsh(pars_nova,t)
+nv.plot_Rsh(pars_nova,t)
