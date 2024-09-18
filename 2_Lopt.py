@@ -129,14 +129,23 @@ t=np.array([1.6])
 Rsh=func_Rsh(pars_nova,t)
 print(Rsh)
 
-ax.plot(r,func_uOPT_r2(pars_nova,r,t),'k-',linewidth=3.0,label=r'$1/r^2$')
-ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,t),'r--',linewidth=3.0,label=r'${\rm Eq.\,14}$')
+# ax.plot(r,func_uOPT_r2(pars_nova,r,t),'k-',linewidth=3.0,label=r'$1/r^2$')
+# ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,t),'r--',linewidth=3.0,label=r'${\rm Eq.\,14}$')
+ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,t),'r--',linewidth=5.0, label='Night 1')
+ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,np.array([2.6])),'g--',linewidth=5.0, label='Night 2')
+ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,np.array([3.6])),'--', color='orange',linewidth=5.0, label='Night 3')
 
 ax.legend()
-ax.set_xscale('log')
+# ax.set_xscale('log')
 ax.set_yscale('log')
-ax.set_xlim(3.0e-1,1.0e2)
-ax.set_ylim(1.0e-3,1.0e2)
+# ax.set_xlim(3.0e-1,1.0e2)
+# ax.set_ylim(1.0e-3,1.0e2)
+
+ax.set_xticks([0, 5, 10, 15, 20])
+
+
+ax.set_xlim(0.0,20.0)
+ax.set_ylim(1.0e-2,2.0e0)
 ax.set_xlabel(r'$r\, {\rm (au)}$',fontsize=fs)
 ax.set_ylabel(r'$u_{\rm opt} \, ({\rm erg\,cm^{-3}})$',fontsize=fs)
 for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
@@ -144,7 +153,7 @@ for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
 ax.legend(loc='upper right', prop={"size":fs})
 ax.grid(linestyle='--')
 
-plt.savefig('fg_uOPT.png')
+plt.savefig('Results/fg_uOPT.png')
 
 
 t_data, LOPT_data=np.loadtxt("Data/LOPT.dat",unpack=True,usecols=[0,1])
