@@ -13,6 +13,8 @@ from scipy.integrate import solve_ivp
 import gato.pack_gato as gt
 from jax import jit
 import matplotlib.ticker as ticker
+import diffrax
+import scipy as sp
 
 fs=22
 
@@ -203,7 +205,7 @@ def func_dE_adi(pars_nova, E, t):
     tST=pars_nova[1]           # day
     alpha=pars_nova[2]         # no unit
     Rmin=pars_nova[5]*1.496e13 # cm
-    ter = pars_nova[9]         # day
+    ter=pars_nova[9]           # day
 
     vsh=func_vsh(pars_nova,t)*1.0e5    # cm/s
     Rsh=func_Rsh(pars_nova,t)*1.496e13 # cm
@@ -213,35 +215,52 @@ def func_dE_adi(pars_nova, E, t):
     mask1=(t>=ter) & (t<tST)
     mask2=(t>=tST)
 
-    dEdt_adi=jnp.zeros_like(t)
-
-    dEdt_adi=jnp.where(mask1, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2)), dEdt_adi)
+    dEdt_adi=jnp.where(mask1, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2)), 0.0)
     dEdt_adi=jnp.where(mask2, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2))-0.2*(p**2/(E+mp))*(2.0*alpha/(t*86400.0)), dEdt_adi)
 
     return dEdt_adi # eV s^-1
 
+# Total rate of energy change 
 def func_dE(pars_nova, E, t):
     return func_dE_acc(pars_nova,E,t) + func_dE_adi(pars_nova,E,t)
 
+# # Maximum energy of particle accelerated from the shock calculated with jax
+# def func_Emax(pars_nova, t):
+# # t(day)
 
-# Maximum energy of particle accelerated from the shock calculated with jax
+#     ter=pars_nova[9] # day
+#     E0=1.0e2         # eV
+
+#     def dE_dt(Emax, tp):
+#         return func_dE_acc(pars_nova,Emax,tp/86400.0)+func_dE_adi(pars_nova,Emax,tp/86400.0)
+
+#     # Note that we initialize particle energy to be around Emax(t=0 day)=100 eV (this value should be computed self-consistently from temperature of 
+#     # plasma around the shock but numrical value of Emax for t>~ 1 day does not change for Emax(t=0 day)=100 or 1000 eV).
+#     t_as=jnp.linspace(ter, t[-1], 1000)
+#     Emax_as=odeint(dE_dt, E0, t_as*86400.0)
+
+#     Emax=jnp.interp(t, t_as, Emax_as, left=E0, right=0.0)
+#     Emax=Emax[jnp.newaxis,:]
+    
+#     return Emax # eV
+
+# Maximum energy of particle accelerated from the shock calculated with diffrax
 def func_Emax(pars_nova, t):
 # t(day)
 
     ter=pars_nova[9] # day
     E0=1.0e2         # eV
 
-    def dE_dt(Emax, tp):
-        return func_dE_acc(pars_nova,Emax,tp/86400.0)+func_dE_adi(pars_nova,Emax,tp/86400.0)
+    def dE_dt(tp, Emax, args):
+        pars_nova = args
+        return (func_dE_acc(pars_nova, Emax, tp)+func_dE_adi(pars_nova, Emax, tp))*86400.0 # eV/day
 
-    # Note that we initialize particle energy to be around Emax(t=0 day)=100 eV (this value should be computed self-consistently from temperature of 
-    # plasma around the shock but numrical value of Emax for t>~ 1 day does not change for Emax(t=0 day)=100 or 1000 eV).
-    t_as=jnp.linspace(ter, t[-1], len(t))
-    Emax_as=odeint(dE_dt, E0, t_as*86400.0)
+    term=diffrax.ODETerm(dE_dt)
+    solver=diffrax.Dopri5()
+    saveat=diffrax.SaveAt(ts=t)        
+    solution=diffrax.diffeqsolve(term, solver, t0=t[0], t1=t[-1], dt0=t[1]-t[0], y0=E0, saveat=saveat, args=pars_nova)
+    Emax=solution.ys[jnp.newaxis, :]  
 
-    Emax=jnp.interp(t, t_as, Emax_as, left=E0, right=0.0)
-    Emax=Emax[jnp.newaxis,:]
-    
     return Emax # eV
 
 # Maximum energy of particle accelerated from the shock calculated with scipy
@@ -262,7 +281,6 @@ def func_fEp_p(pars_nova, E, t):
     xip=pars_nova[6]     # no unit
     delta=pars_nova[7]   # no unit
     epsilon=pars_nova[8] # no unit
-    ter=pars_nova[9]     # day
 
     # Get the maximum energy over time
     Emax=func_Emax(pars_nova, t) # eV
@@ -279,7 +297,6 @@ def func_fEp_p(pars_nova, E, t):
     # Get the momentum and speed 
     p=jnp.sqrt(pow(E+mp,2)-mp*mp)
     vp=(p/(E+mp))
-    # NEp=np.zeros((len(E),len(t)))
 
     # Get all the shock dynamics related quantities
     vsh=func_vsh(pars_nova, t)*1.0e5      # cm s^-1
@@ -300,21 +317,97 @@ def func_fEp_p(pars_nova, E, t):
 
     return fEp # eV^-1 s^-1
 
-# Cumulative spectrum of accelerated protons
+# Cumulative spectrum of accelerated protons without adiabatic energy loss
 def func_JEp_p(pars_nova, E, t):
+# E (eV) and t(day)
 
     # Get the momentum and speed 
     p=jnp.sqrt(pow(E+mp,2)-mp*mp)
     vp=p/(E+mp)
-    NEp=jnp.zeros((len(E), len(t)))
 
-    # Compute NEp by solving the differential equation
+    # Compute NEp by solving the differential equation 
     fEp=func_fEp_p(pars_nova, E, t) # eV^-1 s^-1
     dt=(t[1]-t[0])*86400.0          # s
     NEp=jnp.cumsum(fEp, axis=1)*dt  # eV^-1
 
     return NEp*vp[:, jnp.newaxis]*3.0e10 # eV^-1 cm s^-1
 
+# Evolution of energy due to adiabatic energy loss
+def func_E0(pars_nova, E, t):
+# E (eV) and t(day)
+
+    def dE_dt_adi(Ep, tp):
+        return func_dE_adi(pars_nova, Ep, tp/86400.0) # eV/s
+
+    # t_as=jnp.linspace(ter, t[-1], 1000, mxstep=1000)
+    E0_as=odeint(dE_dt_adi, E, t*86400.0, rtol=1e-6, atol=1e-9, mxstep=1000).T
+
+    return E0_as # eV
+
+def func_E0_np(pars_nova, E, t):
+    sol=sp.integrate.solve_ivp(lambda tp, E:(func_dE_adi(pars_nova,E,tp/86400.0)), [t[0]*86400.0, t[-1]*86400.0], E, t_eval=t*86400.0, method='RK45')
+    E0=sol.y
+
+    return E0
+
+# Cumulative spectrum of accelerated protons with adiabatic energy loss
+@jit
+def func_JEp_p_wiad(pars_nova, E, t):
+
+    # Injection spectrum at the shock
+    def func_fEp_p_wiad(pars_nova, E, t):
+    # E (eV) and t(day)
+
+        xip=pars_nova[6]     # no unit
+        delta=pars_nova[7]   # no unit
+        epsilon=pars_nova[8] # no unit
+
+        # Get the maximum energy over time
+        Emax=func_Emax(pars_nova, t) # eV
+
+        # Get the nomalization for the accelerated spectrum
+        xmin=jnp.sqrt(pow(1.0e8+mp,2)-mp*mp)/mp 
+        xmax=jnp.sqrt(pow(1.0e14+mp,2)-mp*mp)/mp
+        x=jnp.logspace(jnp.log10(xmin), jnp.log10(xmax), 5000)
+
+        dx=(x[1:-1]-x[0:-2])[:,jnp.newaxis]
+        x=x[0:-2][:,jnp.newaxis]
+        Ialpha_p=jnp.sum(pow(x, 4.0-delta)*jnp.exp(-pow(x*mp/Emax, epsilon))*dx/jnp.sqrt(1.0+x*x), axis=0)
+
+        # Get the momentum and speed 
+        p=jnp.sqrt(pow(E+mp,2)-mp*mp)
+        vp=(p/(E+mp))
+
+        # Get all the shock dynamics related quantities
+        vsh=func_vsh(pars_nova, t)*1.0e5      # cm s^-1
+        Rsh=func_Rsh(pars_nova, t)*1.496e13   # cm
+        rho=func_rho(pars_nova, Rsh/1.496e13) # g cm^-3
+
+        # Change the dimension to make the integral
+        Rsh=Rsh[jnp.newaxis, :]
+        vsh=vsh[jnp.newaxis, :]
+        rho=rho[jnp.newaxis, :]
+        Ialpha_p=Ialpha_p[jnp.newaxis, :]
+
+        # Note that Ialpha_p is zero for t<=ter so there will be some nan and we replace it by zero.
+        fEp=3.0*jnp.pi*xip*rho*pow(Rsh,2)*pow(vsh,3)*6.242e11*pow(p/mp, 2.0-delta)*jnp.exp(-pow(p/Emax, epsilon))/(mp*mp*vp*Ialpha_p)
+        fEp=jnp.where(jnp.isnan(fEp), 0.0, fEp)
+
+        return fEp # eV^-1 s^-1
+
+    # Get the momentum and speed 
+    E0=func_E0(pars_nova, E, t)   # eV
+    p0=jnp.sqrt(pow(E0+mp,2)-mp*mp) # eV
+    vp0=p0/(E0+mp)
+
+    dt=t[1]-t[0]
+    k1=dt*86400.0*func_fEp_p_wiad(pars_nova, E0, t)
+    k2=dt*86400.0*func_fEp_p_wiad(pars_nova, E0, t+0.5*dt)
+    k3=dt*86400.0*func_fEp_p_wiad(pars_nova, E0, t+0.5*dt)
+    k4=dt*86400.0*func_fEp_p_wiad(pars_nova, E0, t+dt)
+    NEp=jnp.cumsum((k1+2.0*k2+2.0*k3+k4)/6.0, axis=1)
+
+    return NEp*vp0*3.0e10 # eV^-1 cm s^-1
 
 ############################################################################################################################################
 # Gamma-ray spectrum
@@ -373,7 +466,7 @@ def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
     Ds=pars_nova[12]*3.086e18 # cm
 
     # Calculate the proton distribution
-    JEp=func_JEp_p(pars_nova, E, t)[:, jnp.newaxis, :]      # eV^-1 cm s^-1
+    JEp=func_JEp_p_wiad(pars_nova, E, t)[:, jnp.newaxis, :]      # eV^-1 cm s^-1
     Rsh=func_Rsh(pars_nova, t)*1.496e13                     # cm
     rho=func_rho(pars_nova, t)[jnp.newaxis, jnp.newaxis, :] # g cm^-3
 
@@ -648,6 +741,7 @@ def plot_rho(pars_nova, t):
 
 if __name__ == "__main__":
 
+    # Record the starting time
     start_time=time.time()
 
     # Initialized parameters for RS Ophiuchi 2021  
@@ -668,13 +762,13 @@ if __name__ == "__main__":
     pars_nova=[vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, ter, BRG, TOPT, Ds, model_name]
 
     # Define the time and energy ranges -> note that it is required that t[0]<=ter 
-    t=np.linspace(-1.0,30.0,3101) # day
-    E=np.logspace(8,14,601)       # eV
-    Eg=np.logspace(8,14,601)      # eV
+    t=jnp.linspace(-1.0,6.0,701) # day
+    E=jnp.logspace(8,14,61)       # eV
+    Eg=jnp.logspace(8,14,601)      # eV
 
     # Gamma-ray production cross-section
-    eps_nucl=jnp.array(gt.func_enhancement(E))[:, jnp.newaxis, jnp.newaxis] # no unit
-    d_sigma_g=jnp.array(gt.func_d_sigma_g(E, Eg))[:, :, jnp.newaxis]        # cm^2/eV
+    eps_nucl=jnp.array(gt.func_enhancement(np.array(E)))[:, jnp.newaxis, jnp.newaxis] # no unit
+    d_sigma_g=jnp.array(gt.func_d_sigma_g(np.array(E), np.array(Eg)))[:, :, jnp.newaxis]        # cm^2/eV
 
     # Gamma-gamma cross section
     TOPT=kB*pars_nova[11] # eV
@@ -698,17 +792,22 @@ if __name__ == "__main__":
     vsh=func_vsh(pars_nova, t)
     Rsh=func_Rsh(pars_nova, t)
 
-    # Plot the best fit parameters
-    fEp=func_fEp_p(pars_nova, E, t)
-    JEp=func_JEp_p(pars_nova, E, t) # eV^-1 cm s^-1
+    # # Plot the best fit parameters
+    # fEp=func_fEp_p(pars_nova, E, t)
+    # JEp_woad=func_JEp_p(pars_nova, E, t) # eV^-1 cm s^-1
+    # JEp_wiad=func_JEp_p_wiad(pars_nova, E, t) # eV^-1 cm s^-1
 
-    phi_PPI, tau_gg=func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
+    # print(fEp[0,:])
+    # print('woad',JEp_woad[100,300],JEp_woad.shape)
+    # print('wiad',JEp_wiad[100,300],JEp_wiad.shape)
 
-    plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 1.6)
-    plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 3.6)
-    plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
-    plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
-    chi2=func_loss(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
+    # phi_PPI, tau_gg=func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
+
+    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 1.6)
+    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 3.6)
+    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
+    # plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
+    # chi2=func_loss(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
 
     # np.save('phi_PPI_%s.npy' % pars_nova[13], phi_PPI*np.exp(-tau_gg))
     # phi_PPI=np.load('phi_PPI_%s.npy' % pars_nova[13])
@@ -724,17 +823,16 @@ if __name__ == "__main__":
 
     Emax_test=data['array2']
 
-    # print(Emax_np[0])
-    print(ter, Emax_jnp[0])
+    print(Emax_jnp[0])
+    # print(ter, Emax_jnp[0])
     # print(func_dE_acc(pars_nova,1.0e2,0.0)+func_dE_adi(pars_nova,1.0e2,0.0))
 
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
-    ax.plot(t,Emax_test[0],'k-',linewidth=3.0, label='Numpy')
+    # ax.plot(t,Emax_test[0],'k-',linewidth=3.0, label='Test')
     ax.plot(t,Emax_jnp[0],'-',linewidth=8.0, color='darkgreen')
     ax.plot(t,Emax_np[0],'r:',linewidth=3.0, label='Numpy')
 
-    # ax.legend()
     ax.set_yscale('log')
     ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
     ax.set_ylabel(r'$E_{\rm max} \, ({\rm eV})$',fontsize=fs)
@@ -742,50 +840,73 @@ if __name__ == "__main__":
         label_ax.set_fontsize(fs)
     ax.set_ylim(5.0e1,5.0e12)
     ax.set_xlim(-1.0,10.0)
-    # ax.legend(loc='lower right', prop={"size":fs})
+    ax.legend(loc='lower right', prop={"size":fs})
     ax.grid(linestyle='--')
 
     if(pars_nova[13]==1):
         plt.savefig('fg_jax_Emax_HESS.png')
     else:
         plt.savefig('Results_jax/new_fg_jax_Emax_DM23.png')
-
     plt.close()
+
+    # fig=plt.figure(figsize=(10, 8))
+    # ax=plt.subplot(111)
+
+    # ax.set_xlim(np.log10(1.0),np.log10(50.0))
+
+    # t_vsh, vsh_a, err_vsh_a, vsh_b, err_vsh_b=np.loadtxt('vsh_line.txt',unpack=True,usecols=[0,1,2,3,4])
+    # ax.errorbar(np.log10(t_vsh),np.log10(vsh_a),yerr=err_vsh_a/vsh_a,xerr=t_vsh*0.0,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='red',markeredgecolor='black',markersize=10,label=r'${\rm H\alpha}$')
+    # ax.errorbar(np.log10(t_vsh),np.log10(vsh_b),yerr=err_vsh_b/vsh_b,xerr=t_vsh*0.0,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='green',markeredgecolor='black',markersize=10,label=r'${\rm H\beta}$')
+
+    # img=mpimg.imread("Data/data_vsh_Xray.png")
+    # img_array = np.mean(np.array(img), axis=2)
+
+    # xmin=np.log10(1.0)
+    # xmax=np.log10(50.0)
+    # ymin=np.log10(700.0)
+    # ymax=np.log10(5000.0)
+    # ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
+    # ax.plot(np.log10(t), np.log10(func_vsh(pars_nova, t)), '-', color='orange', linewidth=8)
+
+    # ax.set_aspect((xmax-xmin)/(ymax-ymin))
+    # ax.set_xticks([np.log10(1), np.log10(10)])
+    # ax.get_xaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$10^{%d}$' % int(x)))
+    # ax.set_yticks([np.log10(1000.0), np.log10(5000.1)])
+    # ax.get_yaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$%d$' % int(10**x)))
+
+    # ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    # ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
+    # for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+    #     label_ax.set_fontsize(fs)
+    # ax.legend(loc='upper right', prop={"size":fs})
+    # ax.grid(linestyle='--')
+
+    # plt.savefig('Results_jax/fg_jax_vsh_Xray.png')
+    # plt.close()
 
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
 
-    ax.set_xlim(np.log10(1.0),np.log10(50.0))
+    for i in range(0,len(E),10):
+        ax.plot(t, func_E0(pars_nova, E, t)[i,:], label='%.2e eV' % E[i])
+        ax.plot(t, func_E0_np(pars_nova, E, t)[i,:], '--', label='%.2e eV' % E[i])
 
-    t_vsh, vsh_a, err_vsh_a, vsh_b, err_vsh_b=np.loadtxt('vsh_line.txt',unpack=True,usecols=[0,1,2,3,4])
-    ax.errorbar(np.log10(t_vsh),np.log10(vsh_a),yerr=err_vsh_a/vsh_a,xerr=t_vsh*0.0,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='red',markeredgecolor='black',markersize=10,label=r'${\rm H\alpha}$')
-    ax.errorbar(np.log10(t_vsh),np.log10(vsh_b),yerr=err_vsh_b/vsh_b,xerr=t_vsh*0.0,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='green',markeredgecolor='black',markersize=10,label=r'${\rm H\beta}$')
+        # ax.plot(t, -func_dE_adi(pars_nova, E[i], t), label='%.2e eV' % E[i])
 
-    img=mpimg.imread("Data/data_vsh_Xray.png")
-    img_array = np.mean(np.array(img), axis=2)
+    # for i in range(len(t)):
+    #     print('%.2e %.2e %.2e' % (t[i], func_E0(pars_nova, E, t)[0,i], func_E0_np(pars_nova, E, t)[0,i]))
 
-    xmin=np.log10(1.0)
-    xmax=np.log10(50.0)
-    ymin=np.log10(700.0)
-    ymax=np.log10(5000.0)
-    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
-    ax.plot(np.log10(t), np.log10(func_vsh(pars_nova, t)), '-', color='orange', linewidth=8)
-
-    ax.set_aspect((xmax-xmin)/(ymax-ymin))
-    ax.set_xticks([np.log10(1), np.log10(10)])
-    ax.get_xaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$10^{%d}$' % int(x)))
-    ax.set_yticks([np.log10(1000.0), np.log10(5000.1)])
-    ax.get_yaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$%d$' % int(10**x)))
-
-    ax.legend()
+    ax.set_yscale('log')
+    # ax.set_ylim(1.0e7, 5.0e8)
     ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
+    ax.set_ylabel(r'$E_{\rm 0} \, ({\rm eV})$',fontsize=fs)
     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
         label_ax.set_fontsize(fs)
     ax.legend(loc='upper right', prop={"size":fs})
     ax.grid(linestyle='--')
 
-    plt.savefig('Results/fg_jax_vsh_Xray.png')
+    plt.savefig('Results_jax/fg_jax_E0.png')
+    plt.close()
 
     # Record the ending time
     end_time=time.time()
