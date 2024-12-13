@@ -15,8 +15,13 @@ from jax import jit
 import matplotlib.ticker as ticker
 import diffrax
 import scipy as sp
+from matplotlib.ticker import FuncFormatter
 
 fs=22
+
+# Define a custom tick formatter to display 10^x
+def log_tick_formatter(x, pos):
+    return r'$10^{%d}$' % int(x)
 
 
 ############################################################################################################################################
@@ -128,7 +133,7 @@ def func_vsh(pars_nova, t):
     #     vsh=func_vsh_HESS(t)
     #     vsh=jnp.where(t<ter, 0.0, vsh)
 
-    # vsh=jnp.where((pars_nova[13]==1) & (t<ter), 0.0, func_vsh_HESS(t))
+    vsh=func_vsh_HESS(t)
 
     return vsh # km/s
 
@@ -159,7 +164,7 @@ def func_Rsh(pars_nova, t):
     #     Rsh=func_Rsh_HESS(t)
     #     Rsh=jnp.where(t<ter, 0.0, Rsh)
 
-    # Rsh=jnp.where((pars_nova[13]==1) & (t<ter), 0.0, func_Rsh_HESS(t))
+    Rsh=func_Rsh_HESS(t)
 
     return Rsh*86400.0*6.68e-9 # au
 
@@ -243,7 +248,7 @@ def func_dE_adi(pars_nova, E, t):
     dEdt_adi=jnp.where(mask1, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2)), 0.0)
     dEdt_adi=jnp.where(mask2, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2))-0.2*(p**2/(E+mp))*(2.0*alpha/(t*86400.0)), dEdt_adi)
 
-    return dEdt_adi # eV s^-1
+    return dEdt_adi*0.0 # eV s^-1
 
 # Derivative of adiabatic energy loss rate with respect to kinetric energy
 def func_dE_adi_dE(pars_nova, E, t):
@@ -265,7 +270,7 @@ def func_dE_adi_dE(pars_nova, E, t):
     dEdt_adi_dE=jnp.where(mask1, -0.2*(2.0-(p/(E+mp))**2)*(Rsh*vsh/(Rmin**2+Rsh**2)), 0.0)
     dEdt_adi_dE=jnp.where(mask2, -0.2*(2.0-(p/(E+mp))**2)*(Rsh*vsh/(Rmin**2+Rsh**2))-0.2*(2.0-(p/(E+mp))**2)*(2.0*alpha/(t*86400.0)), dEdt_adi_dE)
 
-    return dEdt_adi_dE # s^-1
+    return dEdt_adi_dE*0.0 # s^-1
 
 # Maximum energy of particle accelerated from the shock calculated with diffrax
 def func_Emax(pars_nova, t):
@@ -321,7 +326,7 @@ def func_JEp_p_dif(pars_nova, E, t):
         delta=pars_nova[7]   # no unit
         epsilon=pars_nova[8] # no unit
 
-        Emax=jnp.interp(tp, t, Emax_arr)
+        Emax=jnp.interp(tp, t, Emax_arr, left=0.0, right=0.0)
 
         # Get the nomalization for the accelerated spectrum
         xmin=jnp.sqrt(pow(1.0e8+mp,2)-mp*mp)/mp 
@@ -365,7 +370,7 @@ def func_JEp_p_dif(pars_nova, E, t):
         y0=0.0
         saveat=diffrax.SaveAt(ts=t)
         
-        # Solve the ODE from t0 to t[-1] with the specific energy E_single and pars
+        # Solve the ODE from t[0] to t[-1] with the specific energy E_single and pars
         solution=diffrax.diffeqsolve(
             terms=term,
             solver=solver,
@@ -395,7 +400,7 @@ def func_JEp_p_dif(pars_nova, E, t):
     return JEp_interp.T # eV^-1 cm s^-1
 
 # Cummulated particle flux solved with Runge-Kutta 4
-@jit
+# @jit
 def func_JEp_p_rk4(pars_nova, E, t):
 
     # Define the function f(t, E, pars) for the right-hand side of the differential equation
@@ -405,7 +410,7 @@ def func_JEp_p_rk4(pars_nova, E, t):
         delta=pars_nova[7]   # no unit
         epsilon=pars_nova[8] # no unit
 
-        Emax=func_Emax(pars_nova, t)
+        Emax=func_Emax(pars_nova, t) # eV
 
         # Get the nomalization for the accelerated spectrum
         xmin=jnp.sqrt(pow(1.0e8+mp,2)-mp*mp)/mp 
@@ -444,9 +449,9 @@ def func_JEp_p_rk4(pars_nova, E, t):
     NEp=jax.vmap(solve_for_energy)(E)
 
     # Get the momentum and speed 
-    E0=E # func_E0(pars_nova, E, t)   # eV
+    E0=E                            # eV
     p0=jnp.sqrt(pow(E0+mp,2)-mp*mp) # eV
-    vp0=p0/(E0+mp)
+    vp0=p0/(E0+mp)                  # no unit
 
     return NEp*vp0[:, jnp.newaxis]*3.0e10 # eV^-1 cm s^-1
 
@@ -622,9 +627,9 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
     ax.grid(linestyle='--')
 
     if(pars_nova[13]==1):
-        plt.savefig('Results_jax_wiad/fg_gamma_day%d_HESS.png' % (t_day))
+        plt.savefig('Results_jax_HESS/fg_gamma_day%d_HESS.png' % (t_day))
     else:
-        plt.savefig('Results_jax_wiad/fg_gamma_day%d_DM23.png' % (t_day))
+        plt.savefig('Results_jax_HESS/fg_gamma_day%d_DM23.png' % (t_day))
 
 # Plot time profile of gamma-ray integrated flux
 def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
@@ -654,16 +659,16 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
     ax.errorbar(t_HESS_raw,flux_HESS_raw,yerr=yerr_HESS_raw,xerr=xerr_HESS_raw,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='red',markeredgecolor='black',markersize=10,label=r'${\rm HESS}$')
     ax.errorbar(t_FERMI_raw,flux_FERMI_raw,yerr=yerr_FERMI_raw,xerr=xerr_FERMI_raw,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='green',markeredgecolor='black',markersize=10,label=r'${\rm FERMI\,(\times 10^{-3})}$')
 
-    data = np.load('test.npz')
+    # data = np.load('test.npz')
 
-    phi_test = data['array1']
-    phi_test_unabs = data['array2']
+    # phi_test = data['array1']
+    # phi_test_unabs = data['array2']
 
-    flux_FLAT_PPI_test=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_test, 0.0), axis=0)
-    flux_HESS_PPI_test=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_test, 0.0), axis=0)
+    # flux_FLAT_PPI_test=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_test, 0.0), axis=0)
+    # flux_HESS_PPI_test=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_test, 0.0), axis=0)
 
-    ax.plot(t,flux_HESS_PPI_test,':', color='orange',linewidth=3.0,label=r'{\rm Model\, HESS\, band}')
-    ax.plot(t,flux_FLAT_PPI_test,':', color='yellow',linewidth=3.0,label=r'{\rm Model\, FERMI\, band}')
+    # ax.plot(t,flux_HESS_PPI_test,':', color='orange',linewidth=3.0,label=r'{\rm Model\, HESS\, band}')
+    # ax.plot(t,flux_FLAT_PPI_test,':', color='yellow',linewidth=3.0,label=r'{\rm Model\, FERMI\, band}')
 
     ax.set_xlim(1.0e-1,5.0e1)
     ax.set_ylim(1.0e-13,3.0e-11)
@@ -677,9 +682,9 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
     ax.grid(linestyle='--')
 
     if(pars_nova[13]==1):
-        plt.savefig('Results_jax_wiad/fg_time_gamma_HESS_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
+        plt.savefig('Results_jax_HESS/fg_time_gamma_HESS_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
     else:
-        plt.savefig('Results_jax_wiad/fg_time_gamma_DM23_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
+        plt.savefig('Results_jax_HESS/fg_time_gamma_DM23_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
     plt.close()
  
 
@@ -688,27 +693,45 @@ if __name__ == "__main__":
     # Record the starting time
     start_time=time.time()
 
+    # # Initialized parameters for RS Ophiuchi 2021  
+    # vsh0=4500.0  # km/s    -> Initial shock speed
+    # tST=1.8      # day     -> Time where shock transition to Sedov-Taylor phase
+    # alpha=0.66   # no unit -> Index for time profile of shock speed
+    # Mdot=2.0e-7  # Msol/yr -> Mass loss rate of red giant
+    # vwind=20.0   # km/s    -> Wind speed of red giant
+    # Rmin=1.48    # au      -> Distance between red giant and white dwarf
+    # xip=0.5      # no unit -> Fraction of shock ram pressure converted into cosmic-ray energy
+    # delta=4.2    # no unit -> Injection spectrum index
+    # epsilon=0.5  # no unit -> Index of the exp cut-off for injection spectrum
+    # BRG=1.0      # G       -> Magnetic field srength at the pole of red giant
+    # TOPT=1.0e4   # K       -> Temperature of the optical photons 
+    # ter=0.0      # day     -> Shock formation time
+    # Ds=1.4e3     # pc      -> Distance to Earth of the nova
+    # model_name=0 # no unit -> Model name (1=HESS and 0=DM23)
+    # pars_nova=[vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, ter, BRG, TOPT, Ds, model_name]
+
     # Initialized parameters for RS Ophiuchi 2021  
     vsh0=4500.0  # km/s    -> Initial shock speed
     tST=1.8      # day     -> Time where shock transition to Sedov-Taylor phase
     alpha=0.66   # no unit -> Index for time profile of shock speed
-    Mdot=6.0e-7  # Msol/yr -> Mass loss rate of red giant
+    Mdot=2.0e-7  # Msol/yr -> Mass loss rate of red giant
     vwind=20.0   # km/s    -> Wind speed of red giant
     Rmin=1.48    # au      -> Distance between red giant and white dwarf
-    xip=0.1      # no unit -> Fraction of shock ram pressure converted into cosmic-ray energy
-    delta=4.4    # no unit -> Injection spectrum index
-    epsilon=1.0  # no unit -> Index of the exp cut-off for injection spectrum
-    BRG=0.1 # 6.5      # G       -> Magnetic field srength at the pole of red giant
+    xip=0.5      # no unit -> Fraction of shock ram pressure converted into cosmic-ray energy
+    delta=4.1    # no unit -> Injection spectrum index
+    epsilon=0.5  # no unit -> Index of the exp cut-off for injection spectrum
+    BRG=10.0      # G       -> Magnetic field srength at the pole of red giant
     TOPT=1.0e4   # K       -> Temperature of the optical photons 
     ter=0.0      # day     -> Shock formation time
     Ds=1.4e3     # pc      -> Distance to Earth of the nova
     model_name=0 # no unit -> Model name (1=HESS and 0=DM23)
     pars_nova=[vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, ter, BRG, TOPT, Ds, model_name]
+    print(pars_nova[10])
 
     # Define the time and energy ranges -> note that it is required that t[0]<=ter 
-    t=jnp.linspace(-1.0,30.0,3101) # day
-    E=jnp.logspace(8,14,61)       # eV
-    Eg=jnp.logspace(8,14,601)      # eV
+    t=jnp.linspace(0.0,6.0,601) # day
+    E=jnp.logspace(9.3,14.0,61)    # eV
+    Eg=jnp.logspace(8.0,14.0,601)  # eV
 
     # Gamma-ray production cross-section
     eps_nucl=jnp.array(gt.func_enhancement(np.array(E)))[:, jnp.newaxis, jnp.newaxis] # no unit
@@ -746,7 +769,7 @@ if __name__ == "__main__":
     plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
     plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
 
-    EnJEp_dif=E[:,jnp.newaxis]**3*NEp_dif/3.0
+    EnJEp_dif=E[:,jnp.newaxis]**3*NEp_dif
     EnJEp_rk4=E[:,jnp.newaxis]**3*NEp_rk4
 
     fig=plt.figure(figsize=(10, 8))
@@ -769,9 +792,140 @@ if __name__ == "__main__":
     ax.legend(loc='upper right', prop={"size":fs})
     ax.grid(linestyle='--')
 
-    plt.savefig('Results_jax_wiad/fg_jax_JEp.png')
+    plt.savefig('Results_jax_HESS/fg_jax_JEp.png')
     plt.close()
 
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+
+    E0=func_E0(pars_nova, E, t).T
+    for i in range(len(E)):
+        if((i%10==0) & (E[i]>1.0e11)):
+            ax.plot(t, E0[i,:], '-', linewidth=3, label='%.2e' % E[i])
+
+    # ax.set_xscale('log')
+    ax.set_yscale('log')
+    # ax.set_xlim(1.0e8, 1.0e14)
+    # ax.set_ylim(1.0e70, 1.0e76)
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_ylabel(r'$E_0 \, ({\rm eV})$',fontsize=fs)
+    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+        label_ax.set_fontsize(fs)
+    ax.legend(loc='upper right', prop={"size":fs})
+    ax.grid(linestyle='--')
+
+    plt.savefig('Results_jax_HESS/fg_jax_E0.png')
+    plt.close()
+
+    vsh=func_vsh(pars_nova, t)*1.0e5      # cm/s
+    Rsh=func_Rsh(pars_nova, t)*1.496e13   # cm
+    rho=func_rho(pars_nova, Rsh/1.496e13) # g/cm^3
+    Lsh=2.0*jnp.pi*Rsh**2*rho*vsh**3      # erg/s
+
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+
+    # Read the image for data    
+    img = mpimg.imread("Data/data_Lsh.png")
+    img_array = np.mean(np.array(img), axis=2)
+
+    xmin=0.0
+    xmax=5.0
+    ymin=0.0
+    ymax=3.5e38
+    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
+    ax.plot(t, Lsh, 'r:', linewidth=3, label='Minh')
+
+    ax.set_aspect(5.0/3.5e38)
+    ax.legend()
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_ylabel(r'$L_{\rm sh} \, ({\rm erg\, s^{-1}})$',fontsize=fs)
+    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+        label_ax.set_fontsize(fs)
+    ax.legend(loc='lower right', prop={"size":fs})
+    ax.grid(linestyle='--')
+    ax.set_xlim(0,5)
+
+    plt.savefig('Results_jax_HESS/fg_Lsh.png')
+
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+    ax.plot(t,vsh/1.0e5,'r--',linewidth=3.0)
+
+    # Read the image for data    
+    img = mpimg.imread("Data/data_vsh.png")
+    img_array = np.mean(np.array(img), axis=2)
+
+    xmin=0.0
+    xmax=6.0
+    ymin=2500.0
+    ymax=5000.0
+    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
+    ax.set_aspect((xmax-xmin)/(ymax-ymin))
+
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
+    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+        label_ax.set_fontsize(fs)
+    ax.legend(loc='upper right', prop={"size":fs})
+    ax.grid(linestyle='--')
+
+    plt.savefig('Results_jax_HESS/fg_vsh.png')
+
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+    ax.plot(t,Rsh/1.496e13,'r--',linewidth=3.0,label='Minh')
+
+    # Read the image for data    
+    img = mpimg.imread("Data/data_Rsh.png")
+    img_array = np.mean(np.array(img), axis=2)
+
+    xmin=0.0
+    xmax=5.0
+    ymin=0.0
+    ymax=14.0
+    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
+    ax.set_aspect(0.3)
+
+    ax.legend()
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_ylabel(r'$R_{\rm sh} \, ({\rm au})$',fontsize=fs)
+    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+        label_ax.set_fontsize(fs)
+    ax.legend(loc='lower right', prop={"size":fs})
+    ax.grid(linestyle='--')
+
+    plt.savefig('Results_jax_HESS/fg_Rsh.png')
+
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+    ax.plot(t,jnp.log10(rho/1.67e-24),'r:',linewidth=3.0, label=r'{\rm Minh}')
+
+    # Read the image for data
+    img = mpimg.imread("Data/data_rho.png")
+    img_array = np.mean(np.array(img), axis=2)
+
+    xmin=0.0
+    xmax=5.0
+    ymin=5.0
+    ymax=9.0
+    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
+    ax.set_yticks([5, 6, 7, 8, 9])
+
+    ax.yaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
+
+    ax.legend()
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_ylabel(r'$L_{\rm opt} \, ({\rm erg\, s^{-1}})$',fontsize=fs)
+    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+        label_ax.set_fontsize(fs)
+    ax.legend(loc='lower right', prop={"size":fs})
+    ax.grid(linestyle='--')
+
+    plt.savefig('Results_jax_HESS/fg_rho.png')
+
+    print('Note that adiabatic energy loss has been deactivated for checking')
+    print('Mdot/vw = %.2e' % (Mdot*2.0e33/(vwind*365.0*86400.0*1.0e5)))
 
     # Record the ending time
     end_time=time.time()
