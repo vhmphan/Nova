@@ -15,6 +15,8 @@ from jax import jit
 import matplotlib.ticker as ticker
 import diffrax
 import scipy as sp
+from jax import grad
+import optax
 
 fs=22
 
@@ -105,61 +107,89 @@ for i in range(1,len(t_HESS_model)):
 
 func_Rsh_HESS=lambda t: jnp.interp(t, t_HESS_model, Rsh_HESS_model, left=0.0, right=0.0)
 
+# # Nova shock speed
+# def func_vsh_step(pars_nova, t):
+# # t (day)
+
+#     vsh0=pars_nova[0]  # km/s
+#     tST=pars_nova[1]   # day
+#     alpha=pars_nova[2] # no unit
+#     ter=pars_nova[9]   # day
+#     t=jnp.array(t)     # day
+
+#     mask1=(t>=ter) & (t<tST)
+#     mask2=(t>=tST)
+
+#     vsh=jnp.zeros_like(t)
+
+#     vsh=jnp.where(mask1, vsh0, vsh)
+#     vsh=jnp.where(mask2, vsh0*jnp.power(t/tST, -alpha), vsh)
+
+#     return vsh # km/s
+
+# # Nova shock radius
+# def func_Rsh_step(pars_nova, t):
+# # t (day)
+
+#     vsh0=pars_nova[0]  # km/s
+#     tST=pars_nova[1]   # day
+#     alpha=pars_nova[2] # no unit
+#     ter=pars_nova[9]   # day
+#     t=jnp.array(t)     # day
+
+#     mask1=(t>=ter) & (t<tST)
+#     mask2=(t>=tST)
+
+#     Rsh=jnp.zeros_like(t)
+
+#     Rsh=jnp.where(mask1, vsh0*(t-ter), Rsh)
+#     Rsh=jnp.where(
+#         mask2,
+#         -vsh0*ter+vsh0*tST*(jnp.power(t/tST, 1.0-alpha)-alpha)/(1.0-alpha),
+#         Rsh,
+#     )
+
+#     return Rsh*86400.0*6.68e-9 # au
+
 # Nova shock speed
 def func_vsh(pars_nova, t):
 # t (day)
 
+    # Parameters for nova shocks
     vsh0=pars_nova[0]  # km/s
     tST=pars_nova[1]   # day
     alpha=pars_nova[2] # no unit
     ter=pars_nova[9]   # day
     t=jnp.array(t)     # day
 
-    mask1=(t>=ter) & (t<tST)
-    mask2=(t>=tST)
+    # Smooth masks using tanh functions
+    smoothing_factor=500.0
+    mask1=0.5*(1.0+jnp.tanh(smoothing_factor*(t-ter)))
+    mask2=0.5*(1.0+jnp.tanh(smoothing_factor*(t-tST)))
 
-    vsh=jnp.zeros_like(t)
+    # Shock speed (note that we use jnp.abs(t/tST) for t>tST to avoid nan)
+    vsh=mask1*(1.0-mask2)*vsh0+mask2*vsh0*jnp.power(jnp.abs(t/tST), -alpha)
 
-    vsh=jnp.where(mask1, vsh0, vsh)
-    vsh=jnp.where(mask2, vsh0*jnp.power(t/tST, -alpha), vsh)
-
-    # # HESS model for shock evolution
-    # if(pars_nova[13]==1):
-    #     vsh=func_vsh_HESS(t)
-    #     vsh=jnp.where(t<ter, 0.0, vsh)
-
-    # vsh=jnp.where((pars_nova[13]==1) & (t<ter), 0.0, func_vsh_HESS(t))
-
-    return vsh # km/s
+    return vsh
 
 # Nova shock radius
 def func_Rsh(pars_nova, t):
 # t (day)
 
+    # Parameters for nova shocks
     vsh0=pars_nova[0]  # km/s
     tST=pars_nova[1]   # day
     alpha=pars_nova[2] # no unit
     ter=pars_nova[9]   # day
     t=jnp.array(t)     # day
 
-    mask1=(t>=ter) & (t<tST)
-    mask2=(t>=tST)
+    # Smooth masks using tanh functions
+    smoothing_factor=500.0
+    mask1=0.5*(1.0+jnp.tanh(smoothing_factor*(t-ter)))
+    mask2=0.5*(1.0+jnp.tanh(smoothing_factor*(t-tST)))
 
-    Rsh=jnp.zeros_like(t)
-
-    Rsh=jnp.where(mask1, vsh0*(t-ter), Rsh)
-    Rsh=jnp.where(
-        mask2,
-        -vsh0*ter+vsh0*tST*(jnp.power(t/tST, 1.0-alpha)-alpha)/(1.0-alpha),
-        Rsh,
-    )
-
-    # # HESS model for shock evolution
-    # if(pars_nova[13]==1):
-    #     Rsh=func_Rsh_HESS(t)
-    #     Rsh=jnp.where(t<ter, 0.0, Rsh)
-
-    # Rsh=jnp.where((pars_nova[13]==1) & (t<ter), 0.0, func_Rsh_HESS(t))
+    # Shock radius (note that we use jnp.abs(t/tST) for t>tST to avoid nan)
+    Rsh=mask1*(1.0-mask2)*vsh0*(t-ter)+mask2*(-vsh0*ter+vsh0*tST*(jnp.power(jnp.abs(t/tST), 1.0-alpha)-alpha)/(1.0-alpha))
 
     return Rsh*86400.0*6.68e-9 # au
 
@@ -185,14 +215,14 @@ def func_rho(pars_nova, r):
 def func_dE_acc(pars_nova, E, t):
 # E (eV) and t(day)
 
-    tST=pars_nova[1]           # day
+    # tST=pars_nova[1]           # day
     Rmin=pars_nova[5]*1.496e13 # cm
-    xip=pars_nova[6]           # no unit
+    # xip=pars_nova[6]           # no unit
     BRG=pars_nova[10]          # G
 
     vsh=func_vsh(pars_nova, t)*1.0e5      # cm/s
     Rsh=func_Rsh(pars_nova, t)*1.496e13   # cm
-    rho=func_rho(pars_nova, Rsh/1.496e13) # g/cm^3
+    # rho=func_rho(pars_nova, Rsh/1.496e13) # g/cm^3
 
     B2_bkgr=BRG*jnp.power(jnp.sqrt(Rmin*Rmin+Rsh*Rsh)/(0.35*1.496e13), -2)  # -> Model with background B-field
     # B2_Bell=jnp.sqrt(11.0*jnp.pi*rho*np.power(vsh*xip, 2))                               # -> Model with amplified B-field
@@ -243,7 +273,7 @@ def func_dE_adi(pars_nova, E, t):
     dEdt_adi=jnp.where(mask1, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2)), 0.0)
     dEdt_adi=jnp.where(mask2, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2))-0.2*(p**2/(E+mp))*(2.0*alpha/(t*86400.0)), dEdt_adi)
 
-    return dEdt_adi*0.0 # eV s^-1
+    return dEdt_adi # eV s^-1
 
 # Derivative of adiabatic energy loss rate with respect to kinetric energy
 def func_dE_adi_dE(pars_nova, E, t):
@@ -265,7 +295,7 @@ def func_dE_adi_dE(pars_nova, E, t):
     dEdt_adi_dE=jnp.where(mask1, -0.2*(2.0-(p/(E+mp))**2)*(Rsh*vsh/(Rmin**2+Rsh**2)), 0.0)
     dEdt_adi_dE=jnp.where(mask2, -0.2*(2.0-(p/(E+mp))**2)*(Rsh*vsh/(Rmin**2+Rsh**2))-0.2*(2.0-(p/(E+mp))**2)*(2.0*alpha/(t*86400.0)), dEdt_adi_dE)
 
-    return dEdt_adi_dE*0.0 # s^-1
+    return dEdt_adi_dE # s^-1
 
 # Maximum energy of particle accelerated from the shock calculated with diffrax
 def func_Emax(pars_nova, t):
@@ -274,8 +304,8 @@ def func_Emax(pars_nova, t):
     E0=1.0e2 # eV
 
     def dE_dt(tp, Emax, args):
-        pars_nova=args
-        return (func_dE_acc(pars_nova, Emax, tp)+func_dE_adi(pars_nova, Emax, tp))*86400.0 # eV day^-1
+        # return (func_dE_acc(pars_nova, Emax, tp)+func_dE_adi(pars_nova, Emax, tp))*86400.0 # eV day^-1
+        return (func_dE_acc(args, Emax, tp))*86400.0 # eV day^-1
 
     term=diffrax.ODETerm(dE_dt)
     solver=diffrax.Dopri5()
@@ -301,9 +331,6 @@ def func_E0(pars_nova, E, t):
         return solution.ys
 
     E0=solve_single_ode_E(E)
-
-    # solve_vectorized=jax.vmap(solve_single_ode)
-    # E0=solve_vectorized(E)
     
     return E0 # eV
 
@@ -455,7 +482,19 @@ def func_JEp_p_rk4(pars_nova, E, t):
 def func_JEp_p_ark(pars_nova, E, t):
 # E (eV) and t (day)
 
+    # Time step for RK4 solver
     dt=t[1]-t[0]                     # day
+
+    # Get the momentum and speed 
+    E0=func_E0(pars_nova, E, t).T   # eV
+    p0=jnp.sqrt(pow(E0+mp,2)-mp*mp) # eV
+    vp0=p0/(E0+mp)                  # no unit
+
+    # Integration factor to solve for NEp
+    def func_It(E_index):
+        return jnp.exp(jnp.cumsum(func_dE_adi_dE(pars_nova, E0[E_index, :], t)*dt*86400.0)) # no unit
+    
+    It=jax.vmap(func_It)(jnp.arange(len(E)))
 
     # Define the function f(t, E, pars) for the right-hand side of the differential equation
     def func_fEp_p(t, Ep, pars_nova):
@@ -491,34 +530,20 @@ def func_JEp_p_ark(pars_nova, E, t):
         return fEp # eV^-1 s^-1
 
     # Define the derivative function for d[N(t)*I(t)]/dt
-    def dN_dt(t, Ep):
-        E0_arr=func_E0(pars_nova, Ep, t)                                            # eV
-        It_arr=jnp.exp(jnp.cumsum(func_dE_adi_dE(pars_nova, E0_arr, t)*dt*86400.0)) # no unit
-        
-        return func_fEp_p(t, E0_arr, pars_nova)*It_arr  
-
-    def func_It(E_single):
-        E0_arr=func_E0(pars_nova, E_single, t)                                      # eV
-        It_arr=jnp.exp(jnp.cumsum(func_dE_adi_dE(pars_nova, E0_arr, t)*dt*86400.0)) # no unit
-    
-        return It_arr
+    def dN_dt(t, E_index):
+        return func_fEp_p(t, E0[E_index, :], pars_nova)*It[E_index, :]  
 
     # Solver function to solve dN/dt for a given energy level E and parameters pars
-    def solve_for_energy(E_single):
-        k1=dt*86400.0*dN_dt(t, E_single)
-        k2=dt*86400.0*dN_dt(t+0.5*dt, E_single)
-        k3=dt*86400.0*dN_dt(t+0.5*dt, E_single)
-        k4=dt*86400.0*dN_dt(t+dt, E_single)
+    def solve_for_energy(E_index):
+        k1=dt*86400.0*dN_dt(t, E_index)
+        k2=dt*86400.0*dN_dt(t+0.5*dt, E_index)
+        k3=dt*86400.0*dN_dt(t+0.5*dt, E_index)
+        k4=dt*86400.0*dN_dt(t+dt, E_index)
         
         return jnp.cumsum((k1+2.0*k2+2.0*k3+k4)/6.0, axis=0)  # This will be N(t, E_single) for this energy level
 
-    NEp=jax.vmap(solve_for_energy)(E)/jax.vmap(func_It)(E)
-
-    # Get the momentum and speed 
-    E0=func_E0(pars_nova, E, t).T   # eV
-    p0=jnp.sqrt(pow(E0+mp,2)-mp*mp) # eV
-    vp0=p0/(E0+mp)                  # no unit
-    JEp=NEp*vp0*3.0e10              # eV^-1 cm s^-1
+    NEp=jax.vmap(solve_for_energy)(jnp.arange(len(E)))/It
+    JEp=NEp*vp0*3.0e10                                    # eV^-1 cm s^-1
 
     def interp_JEp(t_index):
         return jnp.interp(E, E0[:,t_index], JEp[:,t_index], left=0.0, right=0.0) 
@@ -610,6 +635,9 @@ def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
 @jit
 def func_loss(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
 
+    # pars_nova[3]=theta[0]
+    # pars_nova[9]=theta[1]
+
     phi_PPI, _=func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
 
     mask_FLAT=(Eg>=0.1e9) & (Eg<=100.0e9)
@@ -698,10 +726,10 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
     ax.legend(loc='upper right', title=r'{\rm Day\, %d}' % int(t_day-0.6), prop={"size":fs}, title_fontsize=fs)
     ax.grid(linestyle='--')
 
-    if(pars_nova[13]==1):
-        plt.savefig('Results_jax_wiad/fg_gamma_day%d_HESS.png' % (t_day))
-    else:
-        plt.savefig('Results_jax_wiad/fg_gamma_day%d_DM23.png' % (t_day))
+    # if(pars_nova[13]==1):
+    #     plt.savefig('Results_jax_wiad/fg_gamma_day%d_HESS.png' % (t_day))
+    # else:
+    plt.savefig('Results_jax_wiad/fg_gamma_day%d_DM23.png' % (t_day))
 
 # Plot time profile of gamma-ray integrated flux
 def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
@@ -753,10 +781,10 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
     ax.legend(loc='upper left', prop={"size":fs}, ncols=2)
     ax.grid(linestyle='--')
 
-    if(pars_nova[13]==1):
-        plt.savefig('Results_jax_wiad/fg_time_gamma_HESS_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
-    else:
-        plt.savefig('Results_jax_wiad/fg_time_gamma_DM23_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
+    # if(pars_nova[13]==1):
+    #     plt.savefig('Results_jax_wiad/fg_time_gamma_HESS_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
+    # else:
+    plt.savefig('Results_jax_wiad/fg_time_gamma_DM23_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
     plt.close()
  
 
@@ -775,15 +803,14 @@ if __name__ == "__main__":
     xip=0.1      # no unit -> Fraction of shock ram pressure converted into cosmic-ray energy
     delta=4.4    # no unit -> Injection spectrum index
     epsilon=1.0  # no unit -> Index of the exp cut-off for injection spectrum
-    BRG=10.0      # G       -> Magnetic field srength at the pole of red giant
+    BRG=5.0      # G       -> Magnetic field srength at the pole of red giant
     TOPT=1.0e4   # K       -> Temperature of the optical photons 
     ter=0.0      # day     -> Shock formation time
     Ds=1.4e3     # pc      -> Distance to Earth of the nova
-    model_name=0 # no unit -> Model name (1=HESS and 0=DM23)
-    pars_nova=[vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, ter, BRG, TOPT, Ds, model_name]
+    pars_nova=jnp.array([vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, ter, BRG, TOPT, Ds])
 
     # Define the time and energy ranges -> note that it is required that t[0]<=ter 
-    t=jnp.linspace(0.0,30.0,3001) # day
+    t=jnp.linspace(-1.0,30.0,3101) # day
     E=jnp.logspace(8,14,61)        # eV
     Eg=jnp.logspace(8,14,601)      # eV
 
@@ -810,71 +837,95 @@ if __name__ == "__main__":
     yerr_HESS_raw=yerr_HESS_raw[mask]
     xerr_HESS_raw=xerr_HESS_raw[mask]
 
-    # NEp_dif=func_JEp_p_dif(pars_nova, E, t)
-    NEp_ark=func_JEp_p_ark(pars_nova, E, t)
-    NEp_rk4=func_JEp_p_rk4(pars_nova, E, t)
+    # NEp_ark=func_JEp_p_ark(pars_nova, E, t)
+    # NEp_rk4=func_JEp_p_rk4(pars_nova, E, t)
 
-    print(NEp_ark.shape)
-    print(NEp_rk4.shape)
-
-    print(NEp_ark[10])
-    print(NEp_rk4[10])
+    # print(NEp_ark[10])
+    # print(NEp_rk4[10])
 
     # phi_PPI, tau_gg=func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
+
+    # theta=jnp.array([Mdot, BRG])
+    # func_loss_fixed = lambda pars: func_loss(pars, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
+    # print(grad(func_loss_fixed)(pars_nova))
+    # print(grad(func_loss)(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t))
+
+    # func_Emax_fix = lambda pars: jnp.sum(func_Emax(pars, t))
+    # print(grad(func_Emax_fix)(pars_nova))
+
+    func_JEp_p_ark_fix = lambda pars: jnp.sum(func_JEp_p_rk4(pars, E, t))
+    print(grad(func_JEp_p_ark_fix)(pars_nova))
+
+
+    # # grad_init=jnp.abs(grad(func_loss)(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t))
+
+    # # learning_rate=0.01*pars_nova*(grad_init/(grad_init+1.0e-8))
+    # # optimizer=optax.adam(learning_rate)
+    # # opt_state=optimizer.init(pars_nova)
+
+    # print(learning_rate)
 
     # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 1.6)
     # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 3.6)
     # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
     # plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
 
-    EnJEp_ark=E[:,jnp.newaxis]**3*NEp_ark
-    EnJEp_rk4=E[:,jnp.newaxis]**3*NEp_rk4
+    # EnJEp_ark=E[:,jnp.newaxis]**3*NEp_ark
+    # EnJEp_rk4=E[:,jnp.newaxis]**3*NEp_rk4
 
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
+    # fig=plt.figure(figsize=(10, 8))
+    # ax=plt.subplot(111)
 
-    ax.plot(E, EnJEp_ark[:, t==1.0], '-', color='red', linewidth=3, label='Day 1')
-    ax.plot(E, EnJEp_rk4[:, t==1.0], '--', color='black', linewidth=3)
+    # ax.plot(E, EnJEp_ark[:, t==1.0], '-', color='red', linewidth=3, label='Day 1')
+    # ax.plot(E, EnJEp_rk4[:, t==1.0], '--', color='black', linewidth=3)
 
-    ax.plot(E, EnJEp_ark[:, t==5.0], '-', color='orange', linewidth=3, label='Day 5')
-    ax.plot(E, EnJEp_rk4[:, t==5.0], '--', color='black', linewidth=3)
-
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlim(1.0e8, 1.0e14)
-    ax.set_ylim(1.0e70, 1.0e76)
-    ax.set_xlabel(r'$E\, {\rm (eV)}$',fontsize=fs)
-    ax.set_ylabel(r'$J(E) \, ({\rm eV^{2}\, cm\, s^{-1} })$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
-
-    plt.savefig('Results_jax_wiad/fg_jax_JEp.png')
-    plt.close()
-
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-
-    E0=func_E0(pars_nova, E, t).T
-    for i in range(len(E)):
-        if((i%10==0) & (E[i]>1.0e11)):
-            ax.plot(t, E0[i,:], '-', linewidth=3, label='%.2e' % E[i])
+    # ax.plot(E, EnJEp_ark[:, t==5.0], '-', color='orange', linewidth=3, label='Day 5')
+    # ax.plot(E, EnJEp_rk4[:, t==5.0], '--', color='black', linewidth=3)
 
     # ax.set_xscale('log')
-    ax.set_yscale('log')
+    # ax.set_yscale('log')
     # ax.set_xlim(1.0e8, 1.0e14)
     # ax.set_ylim(1.0e70, 1.0e76)
+    # ax.set_xlabel(r'$E\, {\rm (eV)}$',fontsize=fs)
+    # ax.set_ylabel(r'$J(E) \, ({\rm eV^{2}\, cm\, s^{-1} })$',fontsize=fs)
+    # for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+    #     label_ax.set_fontsize(fs)
+    # ax.legend(loc='upper right', prop={"size":fs})
+    # ax.grid(linestyle='--')
+
+    # plt.savefig('Results_jax_wiad/fg_jax_JEp.png')
+    # plt.close()
+
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+    ax.plot(t,func_vsh(pars_nova, t),'r--',linewidth=3.0)
+    ax.plot(t,func_vsh_step(pars_nova, t),'k:',linewidth=3.0)
+
+    # ax.set_xscale('log')
     ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$E_0 \, ({\rm eV})$',fontsize=fs)
+    ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
         label_ax.set_fontsize(fs)
     ax.legend(loc='upper right', prop={"size":fs})
     ax.grid(linestyle='--')
 
-    plt.savefig('Results_jax_wiad/fg_jax_E0.png')
-    plt.close()
+    plt.savefig('Results_jax_wiad/fg_vsh.png')
 
+
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+    ax.plot(t,func_Rsh(pars_nova, t),'r--',linewidth=3.0)
+    ax.plot(t,func_Rsh_step(pars_nova, t),'k:',linewidth=3.0)
+
+    # ax.set_xscale('log')
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_ylabel(r'$R_{\rm sh} \, ({\rm au})$',fontsize=fs)
+    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+        label_ax.set_fontsize(fs)
+    ax.legend(loc='upper right', prop={"size":fs})
+    ax.grid(linestyle='--')
+
+    plt.savefig('Results_jax_wiad/fg_Rsh.png')
 
     # Record the ending time
     end_time=time.time()
