@@ -574,7 +574,7 @@ def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
     Ds=pars_nova[12]*3.086e18 # cm
 
     # Calculate the proton distribution        
-    JEp=func_JEp_p_rk4(pars_nova, E, t)[:, jnp.newaxis, :]  # eV^-1 cm s^-1
+    JEp=func_JEp_p_ark(pars_nova, E, t)[:, jnp.newaxis, :]  # eV^-1 cm s^-1
     Rsh=func_Rsh(pars_nova, t)*1.496e13                     # cm
     rho=func_rho(pars_nova, t)[jnp.newaxis, jnp.newaxis, :] # g cm^-3
 
@@ -715,16 +715,16 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
     ax.errorbar(t_HESS_raw,flux_HESS_raw,yerr=yerr_HESS_raw,xerr=xerr_HESS_raw,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='red',markeredgecolor='black',markersize=10,label=r'${\rm HESS}$')
     ax.errorbar(t_FERMI_raw,flux_FERMI_raw,yerr=yerr_FERMI_raw,xerr=xerr_FERMI_raw,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='green',markeredgecolor='black',markersize=10,label=r'${\rm FERMI\,(\times 10^{-3})}$')
 
-    data = np.load('test.npz')
+    # data = np.load('test.npz')
 
-    phi_test = data['array1']
-    phi_test_unabs = data['array2']
+    # phi_test = data['array1']
+    # phi_test_unabs = data['array2']
 
-    flux_FLAT_PPI_test=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_test, 0.0), axis=0)
-    flux_HESS_PPI_test=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_test, 0.0), axis=0)
+    # flux_FLAT_PPI_test=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_test, 0.0), axis=0)
+    # flux_HESS_PPI_test=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_test, 0.0), axis=0)
 
-    ax.plot(t,flux_HESS_PPI_test,':', color='orange',linewidth=3.0,label=r'{\rm Model\, HESS\, band}')
-    ax.plot(t,flux_FLAT_PPI_test,':', color='yellow',linewidth=3.0,label=r'{\rm Model\, FERMI\, band}')
+    # ax.plot(t,flux_HESS_PPI_test,':', color='orange',linewidth=3.0,label=r'{\rm Model\, HESS\, band}')
+    # ax.plot(t,flux_FLAT_PPI_test,':', color='yellow',linewidth=3.0,label=r'{\rm Model\, FERMI\, band}')
 
     ax.set_xlim(1.0e-1,5.0e1)
     ax.set_ylim(1.0e-13,3.0e-11)
@@ -802,8 +802,6 @@ if __name__ == "__main__":
 
     sub_pars=jnp.array([tST, Mdot, BRG])
     grads_init=jnp.abs(grad(func_loss_fixed)(sub_pars))
-    lr=0.01*sub_pars/grads_init
-
     lr=0.01*sub_pars*(grads_init/(grads_init+1.0e-8))
     optimizer=optax.adam(lr)
     opt_state=optimizer.init(sub_pars)
@@ -823,11 +821,21 @@ if __name__ == "__main__":
     chi2_array=np.array(chi2_arr)
     np.savez_compressed('Results_jax_wiad/pars_scan.npz', sub_pars=sub_pars_array, chi2=chi2_array)
 
+    # data=np.load('Results_jax_wiad/pars_scan.npz')
+
+    # sub_pars_array=data['sub_pars']
+    # chi2_array=data['chi2']
+    # i_best_fit=jnp.where(chi2_array==np.min(chi2_array))
+    # sub_best=sub_pars_array[i_best_fit][0]    
+    # print(sub_best[0])
+ 
+    # pars_best=jnp.array([vsh0, sub_best[0], alpha, sub_best[1], vwind, Rmin, xip, delta, epsilon, ter, sub_best[2], TOPT, Ds])
+
     # phi_PPI, tau_gg=func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
-    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 1.6)
-    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 3.6)
-    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
-    # plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
+    # plot_gamma(pars_best, phi_PPI, tau_gg, Eg, t, 1.6)
+    # plot_gamma(pars_best, phi_PPI, tau_gg, Eg, t, 3.6)
+    # plot_gamma(pars_best, phi_PPI, tau_gg, Eg, t, 5.6)
+    # plot_time_gamma(pars_best, phi_PPI, tau_gg, Eg, t)
 
     # NEp_ark=func_JEp_p_ark(pars_nova, E, t)
     # NEp_rk4=func_JEp_p_rk4(pars_nova, E, t)
