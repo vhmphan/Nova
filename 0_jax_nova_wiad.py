@@ -161,7 +161,7 @@ def func_vsh(pars_nova, t):
     alpha=pars_nova[2] # no unit
     ter=pars_nova[9]   # day
 
-    # Redefine time with respect to ter
+    # Redefine time with respect to ter (add small value to avoid tau=0 day)
     tau=t-ter+1.0e-3
     tauST=tST-ter
 
@@ -186,13 +186,13 @@ def func_Rsh(pars_nova, t):
     ter=pars_nova[9]   # day
     t=jnp.array(t)     # day
 
-    # Redefine time with respect to ter
+    # Redefine time with respect to ter (add small value to avoid tau=0 day)
     tau=t-ter+1.0e-3
     tauST=tST-ter
 
     # Smooth masks using tanh functions
     smoothing_factor=500.0
-    mask1=0.5*(1.0+jnp.tanh(smoothing_factor*(tau)))
+    mask1=0.5*(1.0+jnp.tanh(smoothing_factor*tau))
     mask2=0.5*(1.0+jnp.tanh(smoothing_factor*(tau-tauST)))
 
     # Shock radius
@@ -204,11 +204,13 @@ def func_Rsh(pars_nova, t):
 def func_rho(pars_nova, r):
 # Mdot (Msol/yr), vwind (km/s), and r (au)    
 
+    # Parameters for nova shocks
     Mdot=pars_nova[3]*1.989e33/(365.0*86400.0) # g/s 
     vwind=pars_nova[4]*1.0e5                   # cm/s
     Rmin=pars_nova[5]*1.496e13                 # cm
     r=jnp.array(r)                             # au
 
+    # Density profile upstream?
     rho=Mdot/(4.0*jnp.pi*vwind*pow(Rmin+r*1.496e13,2)) 
 
     return rho # g/cm^3
@@ -222,19 +224,13 @@ def func_rho(pars_nova, r):
 def func_dE_acc(pars_nova, E, t):
 # E (eV) and t(day)
 
-    # tST=pars_nova[1]           # day
     Rmin=pars_nova[5]*1.496e13 # cm
-    # xip=pars_nova[6]           # no unit
     BRG=pars_nova[10]          # G
 
     vsh=func_vsh(pars_nova, t)*1.0e5      # cm/s
     Rsh=func_Rsh(pars_nova, t)*1.496e13   # cm
-    # rho=func_rho(pars_nova, Rsh/1.496e13) # g/cm^3
 
-    B2_bkgr=BRG*jnp.power(jnp.sqrt(Rmin*Rmin+Rsh*Rsh)/(0.35*1.496e13), -2)  # -> Model with background B-field
-    # B2_Bell=jnp.sqrt(11.0*jnp.pi*rho*np.power(vsh*xip, 2))                               # -> Model with amplified B-field
-    B2=B2_bkgr # +B2_Bell*func_Heaviside(arr_t-tST)                                # -> Model with instability switched on
-
+    B2=BRG*jnp.power(jnp.sqrt(Rmin*Rmin+Rsh*Rsh)/(0.35*1.496e13), -2)  # -> Model with background B-field
     dEdt_acc=(qeCGS*B2*jnp.power(vsh, 2))*6.242e+11/(10.0*jnp.pi*3.0e10)
 
     return dEdt_acc # eV s^-1
@@ -261,55 +257,10 @@ def func_dE_acc_bell(pars_nova, E, t):
     return dEdt_acc # eV s^-1
 
 # Adiabatic energy loss rate
-def func_dE_adi_step(pars_nova, E, t):
-# E (eV) and t(day)
-
-    tST=pars_nova[1]           # day
-    alpha=pars_nova[2]         # no unit
-    Rmin=pars_nova[5]*1.496e13 # cm
-    ter=pars_nova[9]           # day
-
-    vsh=func_vsh_step(pars_nova,t)*1.0e5    # cm/s
-    Rsh=func_Rsh_step(pars_nova,t)*1.496e13 # cm
-    p=jnp.sqrt((E+mp)**2-mp**2)        # eV
-    t=jnp.array(t)                     # day
-
-    mask1=(t>=ter) & (t<tST)
-    mask2=(t>=tST)
-
-    tau=t-ter
-
-    dEdt_adi=jnp.where(mask1, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2)), 0.0)
-    dEdt_adi=jnp.where(mask2, -0.2*(p**2/(E+mp))*(Rsh*vsh/(Rmin**2+Rsh**2))-0.2*(p**2/(E+mp))*(2.0*alpha/(tau*86400.0)), dEdt_adi)
-
-    return dEdt_adi # eV s^-1
-
-# Derivative of adiabatic energy loss rate with respect to kinetric energy
-def func_dE_adi_dE_step(pars_nova, E, t):
-# E (eV) and t(day)
-
-    tST=pars_nova[1]           # day
-    alpha=pars_nova[2]         # no unit
-    Rmin=pars_nova[5]*1.496e13 # cm
-    ter=pars_nova[9]           # day
-
-    vsh=func_vsh_step(pars_nova,t)*1.0e5    # cm/s
-    Rsh=func_Rsh_step(pars_nova,t)*1.496e13 # cm
-    p=jnp.sqrt((E+mp)**2-mp**2)        # eV
-    t=jnp.array(t)                     # day
-
-    mask1=(t>=ter) & (t<tST)
-    mask2=(t>=tST)
-
-    dEdt_adi_dE=jnp.where(mask1, -0.2*(2.0-(p/(E+mp))**2)*(Rsh*vsh/(Rmin**2+Rsh**2)), 0.0)
-    dEdt_adi_dE=jnp.where(mask2, -0.2*(2.0-(p/(E+mp))**2)*(Rsh*vsh/(Rmin**2+Rsh**2))-0.2*(2.0-(p/(E+mp))**2)*(2.0*alpha/(t*86400.0)), dEdt_adi_dE)
-
-    return dEdt_adi_dE # s^-1
-
-# Adiabatic energy loss rate
 def func_dE_adi(pars_nova, E, t):
 # E (eV) and t(day)
 
+    # Parameters for nova shocks
     tST=pars_nova[1]           # day
     alpha=pars_nova[2]         # no unit
     Rmin=pars_nova[5]*1.496e13 # cm
@@ -319,7 +270,7 @@ def func_dE_adi(pars_nova, E, t):
     Rsh=func_Rsh(pars_nova,t)*1.496e13 # cm
     p=jnp.sqrt((E+mp)**2-mp**2)        # eV
 
-    # Redefine time with respect to ter
+    # Redefine time with respect to ter (add small value to avoid tau=0 day)
     tau=t-ter+1.0e-3
     tauST=tST-ter
 
@@ -328,9 +279,7 @@ def func_dE_adi(pars_nova, E, t):
     mask1=0.5*(1.0+jnp.tanh(smoothing_factor*(tau)))
     mask2=0.5*(1.0+jnp.tanh(smoothing_factor*(tau-tauST)))
  
-    # Small number is added to tau to avoid nan
     term=2.0*alpha*mask2/(tau*86400.0) 
-
     dEdt_adi=mask1*(-0.2*(p**2/(E+mp)))*((Rsh*vsh/(Rmin**2+Rsh**2))+term)
 
     return dEdt_adi # eV s^-1
@@ -339,6 +288,7 @@ def func_dE_adi(pars_nova, E, t):
 def func_dE_adi_dE(pars_nova, E, t):
 # E (eV) and t(day)
 
+    # Parameters for nova shocks
     tST=pars_nova[1]           # day
     alpha=pars_nova[2]         # no unit
     Rmin=pars_nova[5]*1.496e13 # cm
@@ -860,182 +810,203 @@ if __name__ == "__main__":
 
         return func_loss(pars_scan, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
 
+    N_epoch=5
+    sub_pars_arr=[]
+    chi2_arr=[]
+
     sub_pars=jnp.array([tST, Mdot, BRG])
-    grad    
-    for i in range(10):
-        sub_pars=sub_pars+0.01*grad(func_loss_fixed)(sub_pars)
-        print(sub_pars)
+    grads_init=jnp.abs(grad(func_loss_fixed)(sub_pars))
+    lr=0.01*sub_pars/grads_init
 
-    # print(grad(func_loss)(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t))
+    lr=0.01*sub_pars*(grads_init/(grads_init+1.0e-8))
+    optimizer=optax.adam(lr)
+    opt_state=optimizer.init(sub_pars)
 
-    # func_Emax_fix = lambda pars: jnp.sum(func_dE_adi_step(pars, 1.0e9, t))
-    # print(grad(func_Emax_fix)(pars_nova))
-    # print(func_vsh(pars_nova,0.0))
-    # print(func_dE_adi_step(pars_nova, 1.0e9, ter+0.001))
-    # print(grad(func_dE_adi_step)(pars_nova, 1.0e9, ter+0.001))
-    # print(grad(func_vsh_step)(pars_nova, 0.0))
+    for i in range(N_epoch):
+        grads=grad(func_loss_fixed)(sub_pars)
+        updates, opt_state=optimizer.update(grads,opt_state)
+        sub_pars=optax.apply_updates(sub_pars,updates)
+        
+        chi2=func_loss_fixed(sub_pars)
+        chi2_arr.append(chi2)
+        sub_pars_arr.append(sub_pars)
 
-    # func_JEp_p_ark_fix = lambda pars: jnp.sum(func_vsh(pars, t))
-    # func_JEp_p_ark_fix = lambda pars: jnp.sum(func_JEp_p_ark(pars, E, t))
-    # print(grad(func_JEp_p_ark_fix)(pars_nova))
+        print(i, sub_pars, chi2)
+    
+    sub_pars_array=np.array(sub_pars_arr)
+    chi2_array=np.array(chi2_arr)
+    np.savez_compressed('Results_jax_wiad/pars_scan.npz', sub_pars=sub_pars_array, chi2=chi2_array)
 
-    # # grad_init=jnp.abs(grad(func_loss)(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t))
+    # # print(grad(func_loss)(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t))
 
-    # # learning_rate=0.01*pars_nova*(grad_init/(grad_init+1.0e-8))
-    # # optimizer=optax.adam(learning_rate)
-    # # opt_state=optimizer.init(pars_nova)
+    # # func_Emax_fix = lambda pars: jnp.sum(func_dE_adi_step(pars, 1.0e9, t))
+    # # print(grad(func_Emax_fix)(pars_nova))
+    # # print(func_vsh(pars_nova,0.0))
+    # # print(func_dE_adi_step(pars_nova, 1.0e9, ter+0.001))
+    # # print(grad(func_dE_adi_step)(pars_nova, 1.0e9, ter+0.001))
+    # # print(grad(func_vsh_step)(pars_nova, 0.0))
 
-    # print(learning_rate)
+    # # func_JEp_p_ark_fix = lambda pars: jnp.sum(func_vsh(pars, t))
+    # # func_JEp_p_ark_fix = lambda pars: jnp.sum(func_JEp_p_ark(pars, E, t))
+    # # print(grad(func_JEp_p_ark_fix)(pars_nova))
 
-    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 1.6)
-    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 3.6)
-    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
-    # plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
+    # # # grad_init=jnp.abs(grad(func_loss)(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t))
 
-    EnJEp_ark=E[:,jnp.newaxis]**3*NEp_ark
-    EnJEp_rk4=E[:,jnp.newaxis]**3*NEp_rk4
+    # # # learning_rate=0.01*pars_nova*(grad_init/(grad_init+1.0e-8))
+    # # # optimizer=optax.adam(learning_rate)
+    # # # opt_state=optimizer.init(pars_nova)
 
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
+    # # print(learning_rate)
 
-    ax.plot(E, EnJEp_ark[:, t==0.0], '-', color='green', linewidth=3, label='Day 0')
-    ax.plot(E, EnJEp_rk4[:, t==0.0], '--', color='black', linewidth=3)
+    # # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 1.6)
+    # # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 3.6)
+    # # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
+    # # plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
 
-    ax.plot(E, EnJEp_ark[:, t==1.0], '-', color='red', linewidth=3, label='Day 1')
-    ax.plot(E, EnJEp_rk4[:, t==1.0], '--', color='black', linewidth=3)
+    # EnJEp_ark=E[:,jnp.newaxis]**3*NEp_ark
+    # EnJEp_rk4=E[:,jnp.newaxis]**3*NEp_rk4
 
-    ax.plot(E, EnJEp_ark[:, t==5.0], '-', color='orange', linewidth=3, label='Day 5')
-    ax.plot(E, EnJEp_rk4[:, t==5.0], '--', color='black', linewidth=3)
+    # fig=plt.figure(figsize=(10, 8))
+    # ax=plt.subplot(111)
 
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlim(1.0e8, 1.0e14)
-    ax.set_ylim(1.0e60, 1.0e76)
-    ax.set_xlabel(r'$E\, {\rm (eV)}$',fontsize=fs)
-    ax.set_ylabel(r'$J(E) \, ({\rm eV^{2}\, cm\, s^{-1} })$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
+    # ax.plot(E, EnJEp_ark[:, t==0.0], '-', color='green', linewidth=3, label='Day 0')
+    # ax.plot(E, EnJEp_rk4[:, t==0.0], '--', color='black', linewidth=3)
 
-    plt.savefig('Results_jax_wiad/fg_jax_JEp.png')
-    plt.close()
+    # ax.plot(E, EnJEp_ark[:, t==1.0], '-', color='red', linewidth=3, label='Day 1')
+    # ax.plot(E, EnJEp_rk4[:, t==1.0], '--', color='black', linewidth=3)
 
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-    ax.plot(t,func_vsh(pars_nova, t),'r--',linewidth=3.0)
-    ax.plot(t,func_vsh_step(pars_nova, t),'k:',linewidth=3.0)
-
-    # ax.plot(t,func_vsh_step(jnp.array([vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, 0.5, BRG, TOPT, Ds]), t),'r--',linewidth=3.0)
-    # ax.plot(t+0.5,func_vsh(jnp.array([vsh0, tST-0.5, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, 0.0, BRG, TOPT, Ds]), t),'k:',linewidth=3.0)
+    # ax.plot(E, EnJEp_ark[:, t==5.0], '-', color='orange', linewidth=3, label='Day 5')
+    # ax.plot(E, EnJEp_rk4[:, t==5.0], '--', color='black', linewidth=3)
 
     # ax.set_xscale('log')
     # ax.set_yscale('log')
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
-    ax.set_ylim(100.0,10000.0)
-
-    plt.savefig('Results_jax_wiad/fg_jax_vsh.png')
-
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-
-    ax.set_xlim(np.log10(1.0),np.log10(50.0))
-
-    t_vsh, vsh_a, err_vsh_a, vsh_b, err_vsh_b=np.loadtxt('vsh_line.txt',unpack=True,usecols=[0,1,2,3,4])
-    ax.errorbar(np.log10(t_vsh),np.log10(vsh_a),yerr=err_vsh_a/vsh_a,xerr=t_vsh*0.0,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='red',markeredgecolor='black',markersize=10,label=r'${\rm H\alpha}$')
-    ax.errorbar(np.log10(t_vsh),np.log10(vsh_b),yerr=err_vsh_b/vsh_b,xerr=t_vsh*0.0,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='green',markeredgecolor='black',markersize=10,label=r'${\rm H\beta}$')
-
-    img=mpimg.imread("Data/data_vsh_Xray.png")
-    img_array = np.mean(np.array(img), axis=2)
-
-    xmin=np.log10(1.0)
-    xmax=np.log10(50.0)
-    ymin=np.log10(700.0)
-    ymax=np.log10(5000.0)
-    ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
-    ax.plot(np.log10(t), np.log10(func_vsh(pars_nova, t)), '-', color='orange', linewidth=8)
-    ax.plot(np.log10(t), np.log10(func_vsh_step(pars_nova, t)), ':', color='black', linewidth=8)
-
-    ax.set_aspect((xmax-xmin)/(ymax-ymin))
-    ax.set_xticks([np.log10(1), np.log10(10)])
-    ax.get_xaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$10^{%d}$' % int(x)))
-    ax.set_yticks([np.log10(1000.0), np.log10(5000.1)])
-    ax.get_yaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$%d$' % int(10**x)))
-
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
-
-    plt.savefig('Results_jax_wiad/fg_jax_vsh_Xray.png')
-    plt.close()
-
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-    # ax.plot(t,func_dE_adi_dE(pars_nova, 1.0e9, t),'r--',linewidth=3.0)
-    # ax.plot(t,func_dE_adi_dE_step(pars_nova, 1.0e9, t),'k:',linewidth=3.0)
-
-    ax.plot(t,jnp.cumsum(func_dE_adi(pars_nova, 1.0e9, t)),'r--',linewidth=3.0)
-    ax.plot(t,jnp.cumsum(func_dE_adi_step(pars_nova, 1.0e9, t)),'k:',linewidth=3.0)
-    
-    ax.set_xscale('log')
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
-    # ax.set_ylim(-100.0,0.1)
-
-    plt.savefig('Results_jax_wiad/fg_jax_dE_adi.png')
-
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-    # ax.plot(t,func_Rsh(pars_nova, t),'r--',linewidth=3.0)
-    # ax.plot(t,func_Rsh_step(pars_nova, t),'k:',linewidth=3.0)
-
-    ax.plot(t,func_Rsh_step(pars_nova, t),'r--',linewidth=3.0)
-    ax.plot(t,func_Rsh(pars_nova, t),'k-',linewidth=3.0)
-    ax.plot(t,jnp.cumsum(func_vsh(pars_nova, t))*(t[1]-t[0])*86400.0*6.68459e-9,'g-.',linewidth=3.0)
-
-    # ax.set_xscale('log')
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$R_{\rm sh} \, ({\rm au})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
-
-    plt.savefig('Results_jax_wiad/fg_jax_Rsh.png')
-
-    fig=plt.figure(figsize=(10, 8))
-    ax=plt.subplot(111)
-
-    E0=func_E0(pars_nova, E, t).T
-    for i in range(len(E)):
-        if((i%10==0) & (E[i]>1.0e11)):
-            ax.plot(t, E0[i,:], '-', linewidth=3, label='%.2e' % E[i])
-
-    # ax.set_xscale('log')
-    ax.set_yscale('log')
     # ax.set_xlim(1.0e8, 1.0e14)
-    # ax.set_ylim(1.0e70, 1.0e76)
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$E_0 \, ({\rm eV})$',fontsize=fs)
-    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
-        label_ax.set_fontsize(fs)
-    ax.legend(loc='upper right', prop={"size":fs})
-    ax.grid(linestyle='--')
+    # ax.set_ylim(1.0e60, 1.0e76)
+    # ax.set_xlabel(r'$E\, {\rm (eV)}$',fontsize=fs)
+    # ax.set_ylabel(r'$J(E) \, ({\rm eV^{2}\, cm\, s^{-1} })$',fontsize=fs)
+    # for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+    #     label_ax.set_fontsize(fs)
+    # ax.legend(loc='upper right', prop={"size":fs})
+    # ax.grid(linestyle='--')
 
-    plt.savefig('Results_jax_wiad/fg_jax_E0.png')
-    plt.close()
+    # plt.savefig('Results_jax_wiad/fg_jax_JEp.png')
+    # plt.close()
+
+    # fig=plt.figure(figsize=(10, 8))
+    # ax=plt.subplot(111)
+    # ax.plot(t,func_vsh(pars_nova, t),'r--',linewidth=3.0)
+    # ax.plot(t,func_vsh_step(pars_nova, t),'k:',linewidth=3.0)
+
+    # # ax.plot(t,func_vsh_step(jnp.array([vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, 0.5, BRG, TOPT, Ds]), t),'r--',linewidth=3.0)
+    # # ax.plot(t+0.5,func_vsh(jnp.array([vsh0, tST-0.5, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, 0.0, BRG, TOPT, Ds]), t),'k:',linewidth=3.0)
+
+    # # ax.set_xscale('log')
+    # # ax.set_yscale('log')
+    # ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    # ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
+    # for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+    #     label_ax.set_fontsize(fs)
+    # ax.legend(loc='upper right', prop={"size":fs})
+    # ax.grid(linestyle='--')
+    # ax.set_ylim(100.0,10000.0)
+
+    # plt.savefig('Results_jax_wiad/fg_jax_vsh.png')
+
+    # fig=plt.figure(figsize=(10, 8))
+    # ax=plt.subplot(111)
+
+    # ax.set_xlim(np.log10(1.0),np.log10(50.0))
+
+    # t_vsh, vsh_a, err_vsh_a, vsh_b, err_vsh_b=np.loadtxt('vsh_line.txt',unpack=True,usecols=[0,1,2,3,4])
+    # ax.errorbar(np.log10(t_vsh),np.log10(vsh_a),yerr=err_vsh_a/vsh_a,xerr=t_vsh*0.0,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='red',markeredgecolor='black',markersize=10,label=r'${\rm H\alpha}$')
+    # ax.errorbar(np.log10(t_vsh),np.log10(vsh_b),yerr=err_vsh_b/vsh_b,xerr=t_vsh*0.0,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='green',markeredgecolor='black',markersize=10,label=r'${\rm H\beta}$')
+
+    # img=mpimg.imread("Data/data_vsh_Xray.png")
+    # img_array = np.mean(np.array(img), axis=2)
+
+    # xmin=np.log10(1.0)
+    # xmax=np.log10(50.0)
+    # ymin=np.log10(700.0)
+    # ymax=np.log10(5000.0)
+    # ax.imshow(img_array, cmap ='gray', extent =[xmin, xmax, ymin, ymax], interpolation ='nearest', origin ='upper') 
+    # ax.plot(np.log10(t), np.log10(func_vsh(pars_nova, t)), '-', color='orange', linewidth=8)
+    # ax.plot(np.log10(t), np.log10(func_vsh_step(pars_nova, t)), ':', color='black', linewidth=8)
+
+    # ax.set_aspect((xmax-xmin)/(ymax-ymin))
+    # ax.set_xticks([np.log10(1), np.log10(10)])
+    # ax.get_xaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$10^{%d}$' % int(x)))
+    # ax.set_yticks([np.log10(1000.0), np.log10(5000.1)])
+    # ax.get_yaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$%d$' % int(10**x)))
+
+    # ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    # ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
+    # for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+    #     label_ax.set_fontsize(fs)
+    # ax.legend(loc='upper right', prop={"size":fs})
+    # ax.grid(linestyle='--')
+
+    # plt.savefig('Results_jax_wiad/fg_jax_vsh_Xray.png')
+    # plt.close()
+
+    # fig=plt.figure(figsize=(10, 8))
+    # ax=plt.subplot(111)
+    # # ax.plot(t,func_dE_adi_dE(pars_nova, 1.0e9, t),'r--',linewidth=3.0)
+    # # ax.plot(t,func_dE_adi_dE_step(pars_nova, 1.0e9, t),'k:',linewidth=3.0)
+
+    # ax.plot(t,jnp.cumsum(func_dE_adi(pars_nova, 1.0e9, t)),'r--',linewidth=3.0)
+    # ax.plot(t,jnp.cumsum(func_dE_adi_step(pars_nova, 1.0e9, t)),'k:',linewidth=3.0)
+    
+    # ax.set_xscale('log')
+    # ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    # ax.set_ylabel(r'$v_{\rm sh} \, ({\rm km/s})$',fontsize=fs)
+    # for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+    #     label_ax.set_fontsize(fs)
+    # ax.legend(loc='upper right', prop={"size":fs})
+    # ax.grid(linestyle='--')
+    # # ax.set_ylim(-100.0,0.1)
+
+    # plt.savefig('Results_jax_wiad/fg_jax_dE_adi.png')
+
+    # fig=plt.figure(figsize=(10, 8))
+    # ax=plt.subplot(111)
+    # # ax.plot(t,func_Rsh(pars_nova, t),'r--',linewidth=3.0)
+    # # ax.plot(t,func_Rsh_step(pars_nova, t),'k:',linewidth=3.0)
+
+    # ax.plot(t,func_Rsh_step(pars_nova, t),'r--',linewidth=3.0)
+    # ax.plot(t,func_Rsh(pars_nova, t),'k-',linewidth=3.0)
+    # ax.plot(t,jnp.cumsum(func_vsh(pars_nova, t))*(t[1]-t[0])*86400.0*6.68459e-9,'g-.',linewidth=3.0)
+
+    # # ax.set_xscale('log')
+    # ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    # ax.set_ylabel(r'$R_{\rm sh} \, ({\rm au})$',fontsize=fs)
+    # for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+    #     label_ax.set_fontsize(fs)
+    # ax.legend(loc='upper right', prop={"size":fs})
+    # ax.grid(linestyle='--')
+
+    # plt.savefig('Results_jax_wiad/fg_jax_Rsh.png')
+
+    # fig=plt.figure(figsize=(10, 8))
+    # ax=plt.subplot(111)
+
+    # E0=func_E0(pars_nova, E, t).T
+    # for i in range(len(E)):
+    #     if((i%10==0) & (E[i]>1.0e11)):
+    #         ax.plot(t, E0[i,:], '-', linewidth=3, label='%.2e' % E[i])
+
+    # # ax.set_xscale('log')
+    # ax.set_yscale('log')
+    # # ax.set_xlim(1.0e8, 1.0e14)
+    # # ax.set_ylim(1.0e70, 1.0e76)
+    # ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    # ax.set_ylabel(r'$E_0 \, ({\rm eV})$',fontsize=fs)
+    # for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+    #     label_ax.set_fontsize(fs)
+    # ax.legend(loc='upper right', prop={"size":fs})
+    # ax.grid(linestyle='--')
+
+    # plt.savefig('Results_jax_wiad/fg_jax_E0.png')
+    # plt.close()
 
     # Record the ending time
     end_time=time.time()
