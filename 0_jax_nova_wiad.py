@@ -561,7 +561,7 @@ def func_fEtd(Urad, Trad, sigma, Ebg):
     fEtd=Urad/(jnp.power(Trad, 2)*func_gamma(4.0+sigma)*func_zeta(4.0+sigma)*(jnp.exp(Ebg/Trad)-1.0))
     fEtd*=jnp.power(Ebg/Trad, 2.0+sigma)
     
-    return fEtd  # eV^-1 cm^-3
+    return fEtd # eV^-1 cm^-3
 
 # Function to calculate the predicted integrated flux
 @jit
@@ -574,7 +574,7 @@ def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
     Ds=pars_nova[12]*3.086e18 # cm
 
     # Calculate the proton distribution        
-    JEp=func_JEp_p_rk4(pars_nova, E, t)[:, jnp.newaxis, :]      # eV^-1 cm s^-1
+    JEp=func_JEp_p_rk4(pars_nova, E, t)[:, jnp.newaxis, :]  # eV^-1 cm s^-1
     Rsh=func_Rsh(pars_nova, t)*1.496e13                     # cm
     rho=func_rho(pars_nova, t)[jnp.newaxis, jnp.newaxis, :] # g cm^-3
 
@@ -685,9 +685,6 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
     ax.legend(loc='upper right', title=r'{\rm Day\, %d}' % int(t_day-0.6), prop={"size":fs}, title_fontsize=fs)
     ax.grid(linestyle='--')
 
-    # if(pars_nova[13]==1):
-    #     plt.savefig('Results_jax_wiad/fg_gamma_day%d_HESS.png' % (t_day))
-    # else:
     plt.savefig('Results_jax_wiad/fg_gamma_day%d_DM23.png' % (t_day))
 
 # Plot time profile of gamma-ray integrated flux
@@ -740,9 +737,6 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
     ax.legend(loc='upper left', prop={"size":fs}, ncols=2)
     ax.grid(linestyle='--')
 
-    # if(pars_nova[13]==1):
-    #     plt.savefig('Results_jax_wiad/fg_time_gamma_HESS_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
-    # else:
     plt.savefig('Results_jax_wiad/fg_time_gamma_DM23_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10]))
     plt.close()
  
@@ -796,14 +790,6 @@ if __name__ == "__main__":
     yerr_HESS_raw=yerr_HESS_raw[mask]
     xerr_HESS_raw=xerr_HESS_raw[mask]
 
-    NEp_ark=func_JEp_p_ark(pars_nova, E, t)
-    NEp_rk4=func_JEp_p_rk4(pars_nova, E, t)
-
-    # print(NEp_ark[10])
-    # print(NEp_rk4[10])
-
-    # phi_PPI, tau_gg=func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
-
     @jit
     def func_loss_fixed(sub_pars): 
         pars_scan=jnp.array([vsh0, sub_pars[0], alpha, sub_pars[1], vwind, Rmin, xip, delta, epsilon, ter, sub_pars[2], TOPT, Ds])
@@ -837,31 +823,14 @@ if __name__ == "__main__":
     chi2_array=np.array(chi2_arr)
     np.savez_compressed('Results_jax_wiad/pars_scan.npz', sub_pars=sub_pars_array, chi2=chi2_array)
 
-    # # print(grad(func_loss)(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t))
+    # phi_PPI, tau_gg=func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
+    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 1.6)
+    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 3.6)
+    # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
+    # plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
 
-    # # func_Emax_fix = lambda pars: jnp.sum(func_dE_adi_step(pars, 1.0e9, t))
-    # # print(grad(func_Emax_fix)(pars_nova))
-    # # print(func_vsh(pars_nova,0.0))
-    # # print(func_dE_adi_step(pars_nova, 1.0e9, ter+0.001))
-    # # print(grad(func_dE_adi_step)(pars_nova, 1.0e9, ter+0.001))
-    # # print(grad(func_vsh_step)(pars_nova, 0.0))
-
-    # # func_JEp_p_ark_fix = lambda pars: jnp.sum(func_vsh(pars, t))
-    # # func_JEp_p_ark_fix = lambda pars: jnp.sum(func_JEp_p_ark(pars, E, t))
-    # # print(grad(func_JEp_p_ark_fix)(pars_nova))
-
-    # # # grad_init=jnp.abs(grad(func_loss)(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t))
-
-    # # # learning_rate=0.01*pars_nova*(grad_init/(grad_init+1.0e-8))
-    # # # optimizer=optax.adam(learning_rate)
-    # # # opt_state=optimizer.init(pars_nova)
-
-    # # print(learning_rate)
-
-    # # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 1.6)
-    # # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 3.6)
-    # # plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, 5.6)
-    # # plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t)
+    # NEp_ark=func_JEp_p_ark(pars_nova, E, t)
+    # NEp_rk4=func_JEp_p_rk4(pars_nova, E, t)
 
     # EnJEp_ark=E[:,jnp.newaxis]**3*NEp_ark
     # EnJEp_rk4=E[:,jnp.newaxis]**3*NEp_rk4
