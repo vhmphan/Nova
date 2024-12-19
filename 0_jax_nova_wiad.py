@@ -764,20 +764,28 @@ if __name__ == "__main__":
 
     # Define the time and energy ranges -> note that it is required that t[0]<=ter 
     t=jnp.linspace(0.0,30.0,3001) # day
-    E=jnp.logspace(8,14,61)        # eV
-    Eg=jnp.logspace(8,14,601)      # eV
+    # E=jnp.logspace(8,14,61)        # eV
+    # Eg=jnp.logspace(8,14,601)      # eV
 
-    # Gamma-ray production cross-section
-    eps_nucl=jnp.array(gt.func_enhancement(np.array(E)))[:, jnp.newaxis, jnp.newaxis] # no unit
-    d_sigma_g=jnp.array(gt.func_d_sigma_g(np.array(E), np.array(Eg)))[:, :, jnp.newaxis]        # cm^2/eV
+    # Load the energy ranges and pre-computed cross-sections
+    data_d_sigma_g=np.load('Data/d_sigma_g.npz')
+    E=data_d_sigma_g['E']
+    Eg=data_d_sigma_g['Eg']
+    eps_nucl=data_d_sigma_g['eps_nucl']
+    d_sigma_g=data_d_sigma_g['d_sigma_g']
+
+    # # Gamma-ray production cross-section
+    # eps_nucl = jnp.array(gt.func_enhancement(np.array(E)))[:, jnp.newaxis, jnp.newaxis] # no unit
+    # d_sigma_g = jnp.array(d_sigma_g)[:, :, jnp.newaxis]        # cm^2/eV
 
     # Gamma-gamma cross section
-    TOPT=kB*pars_nova[11] # eV
-    Ebg=jnp.logspace(jnp.log10(TOPT*1.0e-2), jnp.log10(TOPT*1.0e2), 1000) # eV
-    dEbg=jnp.append(jnp.diff(Ebg), 0.0)[jnp.newaxis,:,jnp.newaxis]        # eV
-    sigma_gg=gt.func_sigma_gg(Eg, Ebg)[:,:,jnp.newaxis]                   # cm^2
+    TOPT = kB * pars_nova[11] # eV
+    Ebg = jnp.logspace(jnp.log10(TOPT*1.0e-2), jnp.log10(TOPT*1.0e2), 1000) # eV
+    dEbg = jnp.append(jnp.diff(Ebg), 0.0)[jnp.newaxis,:,jnp.newaxis]        # eV
+    sigma_gg = gt.func_sigma_gg(Eg, Ebg)[:,:,jnp.newaxis]                   # cm^2
 
-    # Limit the range for data
+
+    # Continue with the rest of the code...
     mask=(t_FERMI_raw<t[-1])
     t_FERMI_raw=t_FERMI_raw[mask]
     flux_FERMI_raw=flux_FERMI_raw[mask]
@@ -802,7 +810,7 @@ if __name__ == "__main__":
 
     sub_pars=jnp.array([tST, Mdot, BRG])
     grads_init=jnp.abs(grad(func_loss_fixed)(sub_pars))
-    lr=0.01*sub_pars*(grads_init/(grads_init+1.0e-8))
+    lr=0.05*sub_pars*(grads_init/(grads_init+1.0e-8))
     optimizer=optax.adam(lr)
     opt_state=optimizer.init(sub_pars)
 
