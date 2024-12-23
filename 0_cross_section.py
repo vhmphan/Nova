@@ -22,7 +22,7 @@ fs=22
 
 # Define the energy ranges -> note that it is required that t[0]<=ter 
 E=jnp.logspace(8,14,61)        # eV
-Eg=jnp.logspace(8,14,601)      # eV
+Eg=jnp.logspace(8,14,61)      # eV
 
 # Gamma-ray production cross-section
 eps_nucl=jnp.array(gt.func_enhancement(np.array(E)))[:, jnp.newaxis, jnp.newaxis] # no unit
