@@ -168,16 +168,30 @@ def func_Rsh(pars_nova, t):
 
     return Rsh*86400.0*6.68e-9 # au
 
+# # Density profile of the red giant wind
+# def func_rho(pars_nova, r):
+# # Mdot (Msol/yr), vwind (km/s), and r (au)    
+
+#     Mdot=pars_nova[3]*1.989e33/(365.0*86400.0) # g/s 
+#     vwind=pars_nova[4]*1.0e5                   # cm/s
+#     Rmin=pars_nova[5]*1.496e13                 # cm
+#     r=jnp.array(r)                             # au
+
+#     rho=Mdot/(4.0*jnp.pi*vwind*pow(Rmin+r*1.496e13,2)) 
+
+#     return rho # g/cm^3
+
 # Density profile of the red giant wind
 def func_rho(pars_nova, r):
 # Mdot (Msol/yr), vwind (km/s), and r (au)    
 
+    # Parameters for nova shocks
     Mdot=pars_nova[3]*1.989e33/(365.0*86400.0) # g/s 
     vwind=pars_nova[4]*1.0e5                   # cm/s
     Rmin=pars_nova[5]*1.496e13                 # cm
-    r=jnp.array(r)                             # au
 
-    rho=Mdot/(4.0*jnp.pi*vwind*pow(Rmin+r*1.496e13,2)) 
+    # Density profile upstream?
+    rho=Mdot/(4.0*jnp.pi*vwind*(Rmin**2+(r*1.496e13)**2)) 
 
     return rho # g/cm^3
 
@@ -203,7 +217,7 @@ def func_dE_acc(pars_nova, E, t):
     # B2_Bell=jnp.sqrt(11.0*jnp.pi*rho*np.power(vsh*xip, 2))                               # -> Model with amplified B-field
     B2=B2_bkgr # +B2_Bell*func_Heaviside(arr_t-tST)                                # -> Model with instability switched on
 
-    dEdt_acc=(qeCGS*B2*jnp.power(vsh, 2))*6.242e+11/(10.0*jnp.pi*3.0e10)
+    dEdt_acc=(qeCGS*B2*jnp.power(vsh, 2))*6.242e+11/(30.0*jnp.pi*3.0e10)
 
     return dEdt_acc # eV s^-1
 
@@ -515,7 +529,7 @@ def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
     Ds=pars_nova[12]*3.086e18 # cm
 
     # Calculate the proton distribution        
-    JEp=func_JEp_p_dif(pars_nova, E, t)[:, jnp.newaxis, :]      # eV^-1 cm s^-1
+    JEp=func_JEp_p_rk4(pars_nova, E, t)[:, jnp.newaxis, :]      # eV^-1 cm s^-1
     Rsh=func_Rsh(pars_nova, t)*1.496e13                     # cm
     rho=func_rho(pars_nova, t)[jnp.newaxis, jnp.newaxis, :] # g cm^-3
 
@@ -718,15 +732,14 @@ if __name__ == "__main__":
     vwind=20.0   # km/s    -> Wind speed of red giant
     Rmin=1.48    # au      -> Distance between red giant and white dwarf
     xip=0.5      # no unit -> Fraction of shock ram pressure converted into cosmic-ray energy
-    delta=4.1    # no unit -> Injection spectrum index
+    delta=4.2    # no unit -> Injection spectrum index
     epsilon=0.5  # no unit -> Index of the exp cut-off for injection spectrum
-    BRG=10.0      # G       -> Magnetic field srength at the pole of red giant
+    BRG=1.0      # G       -> Magnetic field srength at the pole of red giant
     TOPT=1.0e4   # K       -> Temperature of the optical photons 
     ter=0.0      # day     -> Shock formation time
     Ds=1.4e3     # pc      -> Distance to Earth of the nova
-    model_name=0 # no unit -> Model name (1=HESS and 0=DM23)
+    model_name=1 # no unit -> Model name (1=HESS and 0=DM23)
     pars_nova=[vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, ter, BRG, TOPT, Ds, model_name]
-    print(pars_nova[10])
 
     # Define the time and energy ranges -> note that it is required that t[0]<=ter 
     t=jnp.linspace(0.0,6.0,601) # day

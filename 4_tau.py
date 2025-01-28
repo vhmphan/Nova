@@ -30,76 +30,47 @@ def func_Rsh(pars_nova, t):
 
     return Rsh*86400.0*6.68e-9 # au
 
-# def func_tau_test1(Rsh, tau_ph, eps_min, eps_max):
-#     def func_inner_int(eps):
-
-#         def func_r(eps, s):
-#             return jnp.sqrt(s**2-2.0*s*Rsh*jnp.sqrt(1.0-eps**2)+Rsh**2)
-
-#         def func_gopt(x):
-#             return (1.0/x) - ((1.0/x**2) - 1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
-        
-#         s=jnp.linspace(0.0, 100.0*Rsh, 5000)
-#         ds=jnp.append(jnp.diff(s),0)
-#         inner_int=jnp.sum((3*func_r(eps, s)/(2*Rph)) * func_gopt(func_r(eps, s)/Rph) * ds/Rph)
-        
-#         return jnp.exp(-tau_ph * inner_int) * eps /jnp.sqrt(1.0-eps**2)
-
-#     eps=jnp.linspace(eps_min, eps_max, 10000)
-#     deps=jnp.append(jnp.diff(eps), 0.0)
-#     inner_int=jax.vmap(func_inner_int)(eps)
-#     result=jnp.sum(inner_int*deps)
-
-#     return result
-
-# def func_tau_test2(Rsh, tau_ph, eps_min, eps_max):
-#     def func_inner_int(eps):
-
-#         def func_r(eps, s):
-#             return jnp.sqrt(s**2-2.0*s*Rsh*jnp.sqrt(1.0-eps**2)+Rsh**2)
-
-#         def func_gopt(x):
-#             return (1.0/x)-((1.0/x**2)-1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
-        
-#         s=jnp.linspace(2.0*Rsh*jnp.sqrt(1.0-eps**2), 100.0*Rsh, 5000)
-#         ds=jnp.append(jnp.diff(s),0)
-#         inner_int=jnp.sum((3*func_r(eps, s)/(2*Rph)) * func_gopt(func_r(eps, s)/Rph) * ds/Rph)
-        
-#         return jnp.exp(-tau_ph * inner_int) * eps /jnp.sqrt(1.0-eps**2)
-
-#     eps=jnp.linspace(eps_min, eps_max, 10000)
-#     deps=jnp.append(jnp.diff(eps), 0.0)
-#     inner_int=jax.vmap(func_inner_int)(eps)
-#     result=jnp.sum(inner_int*deps)
-
-#     return result
-
-def func_gopt(x):
+# Auxiliary function for energy density of optical photons
+def func_gOPT(x):
     return (1.0/x)-((1.0/x**2)-1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
 
+# Auxiliary function for the opacity tau_1
+def func_inner_int1(pars_nova, eps, t):
 
-def func_inner_int(pars_nova, eps, t):
-
-    Rsh=func_Rsh(pars_nova, t)[jnp.newaxis, :]
-    s=jnp.linspace(0.0, 200.0, 2001)
-    ds=s[1]-s[0]
+    Rsh=func_Rsh(pars_nova, t)
 
     def func_inner_int_single(eps_single):
-        r=jnp.sqrt(s[:, jnp.newaxis]**2-2.0*s[:, jnp.newaxis]*Rsh*jnp.sqrt(1.0-eps_single**2)+Rsh**2)
-        return jnp.sum((1.5*r/Rph)*func_gopt(r/Rph)*ds/Rph, axis=0)
+        s=jnp.linspace(0.0*Rsh, 100.0*Rsh, 1001, axis=0)                                                              # au
+        ds=jnp.diff(s, append=s[-1:, :], axis=0)  
+        r=jnp.sqrt(s**2-2.0*s*Rsh[jnp.newaxis, :]*jnp.sqrt(1.0-eps_single**2)+Rsh[jnp.newaxis, :]**2) # au
+
+        return jnp.sum((1.5*r/Rph)*func_gOPT(r/Rph)*ds/Rph, axis=0)
         
-    return jax.vmap(func_inner_int_single)(eps)
+    return jax.vmap(func_inner_int_single)(eps) # no unit
 
+# Auxiliary function for the opacity tau_2
+def func_inner_int2(pars_nova, eps, t):
 
+    Rsh=func_Rsh(pars_nova, t)
+
+    def func_inner_int_single(eps_single):
+        s=jnp.linspace(2.0*Rsh*jnp.sqrt(1.0-eps_single**2), 100.0*Rsh, 1001, axis=0)                                                              # au
+        ds=jnp.diff(s, append=s[-1:, :], axis=0)  
+        r=jnp.sqrt(s**2-2.0*s*Rsh[jnp.newaxis, :]*jnp.sqrt(1.0-eps_single**2)+Rsh[jnp.newaxis, :]**2) # au
+
+        return jnp.sum((1.5*r/Rph)*func_gOPT(r/Rph)*ds/Rph, axis=0)
+        
+    return jax.vmap(func_inner_int_single)(eps) # no unit
+
+# Average opacity tau_1 for gamma rays passing through the shock downstream
 @jax.jit
 def func_tau_ph1(pars_nova, tau_ph, t):
 
     tau_ph_sparse=tau_ph[:,::10]
-    eps=jnp.linspace(0.001, 0.999999, 2000)
+    eps=jnp.linspace(0.001, 0.999999, 1000)
     deps=jnp.append(jnp.diff(eps), 0.0)
-    inner_int=jnp.exp(-0.0*tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
+    inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int1(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
     tau_ph1=jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps[:, jnp.newaxis, jnp.newaxis]/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
-    # tau_ph1=jnp.sum(eps[:, jnp.newaxis, jnp.newaxis]*deps/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
 
     def interp_tau_ph1(Eg_index):
         return jnp.interp(t, t[::10], tau_ph1[Eg_index, :], left=0.0, right=0.0) 
@@ -108,41 +79,23 @@ def func_tau_ph1(pars_nova, tau_ph, t):
 
     return tau_ph1_full
 
-# @jax.jit
-# def func_tau_ph2(pars_nova, tau_ph, Eg, t):
-    
-#     def func_tau_full_single(Rsh_single, tau_ph_single):
-#         def func_inner_int(eps):
+# Average opacity tau_2 for gamma rays passing directly into the shock upstream
+@jax.jit
+def func_tau_ph2(pars_nova, tau_ph, t):
 
-#             def func_r(eps, s):
-#                 return jnp.sqrt(s**2-2.0*s*Rsh_single*jnp.sqrt(1.0-eps**2)+Rsh_single**2)
+    tau_ph_sparse=tau_ph[:,::10]
+    eps=jnp.linspace(0.001, 0.999999, 1000)
+    deps=jnp.append(jnp.diff(eps), 0.0)
+    inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int2(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
+    tau_ph2=jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps[:, jnp.newaxis, jnp.newaxis]/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
 
-#             def func_gopt(x):
-#                 return (1.0/x)-((1.0/x**2)-1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
-            
-#             s=jnp.linspace(2.0*Rsh_single*jnp.sqrt(1.0-eps**2), 100.0*Rsh_single, 5000)
-#             ds=s[1]-s[0]#jnp.append(jnp.diff(s),0)
-#             inner_int=jnp.sum((3*func_r(eps, s)/(2*Rph))*func_gopt(func_r(eps, s)/Rph)*ds/Rph)
-            
-#             return jnp.exp(-tau_ph_single*inner_int)
+    def interp_tau_ph2(Eg_index):
+        return jnp.interp(t, t[::10], tau_ph2[Eg_index, :], left=0.0, right=0.0) 
 
-#         eps=jnp.linspace(0.001, 0.999, 1000)
-#         deps=jnp.append(jnp.diff(eps), 0.0)
-#         inner_int=jax.vmap(func_inner_int)(eps)
-#         result=jnp.sum(inner_int*eps*deps/jnp.sqrt(1.0-eps**2))+inner_int[-1]*jnp.sqrt(1.0-0.999**2)
+    tau_ph2_full=jax.vmap(interp_tau_ph2)(jnp.arange(len(Eg)))
 
-#         return result
+    return tau_ph2_full
 
-#     Rsh=jnp.tile(func_Rsh(pars_nova, t[::10]), (len(Eg), 1)) # au 
-#     tau_ph2=jax.vmap(func_tau_full_single)(Rsh.ravel(), tau_ph[:,::10].ravel())
-#     tau_ph2=tau_ph2.reshape(tau_ph[:,::10].shape)
-
-#     def interp_tau_ph2(Eg_index):
-#         return jnp.interp(t, t[::10], tau_ph2[Eg_index, :], left=0.0, right=0.0) 
-
-#     tau_ph2_full=jax.vmap(interp_tau_ph2)(jnp.arange(len(Eg)))
-
-#     return tau_ph2_full
 
 if __name__ == "__main__":
 
@@ -169,6 +122,10 @@ if __name__ == "__main__":
     t=data['t']
     tau_ph=data['tau_ph']
 
+    Rsh=func_Rsh(pars_nova, t)
+    s = jnp.linspace(0.0 * Rsh, 100.0 * Rsh, 3, axis=0)  
+    ds = jnp.diff(s, append=s[-1:, :], axis=0)  
+    print(ds)
     # print(jnp.tile(func_Rsh(pars_nova, t), (len(Eg), 1)).shape)
 
     # tau_ph_sparse=tau_ph[:,::10]
@@ -181,11 +138,11 @@ if __name__ == "__main__":
     # print(jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps/jnp.sqrt(1.0-eps[:, jnp.newaxis, jnp.newaxis]**2), axis=0))
 
     tau_ph1=func_tau_ph1(pars_nova, tau_ph, t)
-    # # # tau_ph2=func_tau_ph2(pars_nova, tau_ph, Eg, t)
+    tau_ph2=func_tau_ph2(pars_nova, tau_ph, t)
 
     it=110
     print(t[it])
-    print(tau_ph[30,it], func_Rsh(pars_nova,t[it]), Rph, tau_ph1[30,it]) #, tau_ph2[30,it])
+    print(tau_ph[30,it], func_Rsh(pars_nova,t[it]), Rph, tau_ph1[30,it], tau_ph2[30,it])
 
     # print(tau_ph[30,it], tau_ph1[30,it], tau_ph2[30,it])
     # # print(func_tau_test1(func_Rsh(pars_nova, t)[it], tau_ph[30,it], 0.001, 0.999999))

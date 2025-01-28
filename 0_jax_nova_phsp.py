@@ -473,10 +473,14 @@ def func_LOPT(t):
 
     return LOPT # erg s^-1
 
+# # Auxiliary function for energy density of optical photons
+# def func_gOPT(x):
+# # x=r/Rsh
+#     return (1.0/x)-((1.0/x**2)-1.0)*np.log(np.sqrt(np.abs((x-1.0)/(x+1.0))))
+
 # Auxiliary function for energy density of optical photons
 def func_gOPT(x):
-# x=r/Rsh
-    return (1.0/x)-((1.0/x**2)-1.0)*np.log(np.sqrt(np.abs((x-1.0)/(x+1.0))))
+    return (1.0/x)-((1.0/x**2)-1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
 
 # Energy density of optical photons assuming optical photons are uniformly emitted with the photosphere of radius Rph
 def func_uOPT_rt(pars_nova, r, t):
@@ -531,6 +535,70 @@ def func_fEtd(Urad, Trad, sigma, Ebg):
     
     return fEtd # eV^-1 cm^-3
 
+# Auxiliary function for the opacity tau_1
+def func_inner_int1(pars_nova, eps, t):
+
+    Rph=pars_nova[13]          # au
+    Rsh=func_Rsh(pars_nova, t) # au
+
+    def func_inner_int_single(eps_single):
+        s=jnp.linspace(0.0*Rsh, 100.0*Rsh, 1001, axis=0)                                                              # au
+        ds=jnp.diff(s, append=s[-1:, :], axis=0)  
+        r=jnp.sqrt(s**2-2.0*s*Rsh[jnp.newaxis, :]*jnp.sqrt(1.0-eps_single**2)+Rsh[jnp.newaxis, :]**2) # au
+
+        return jnp.sum((1.5*r/Rph)*func_gOPT(r/Rph)*ds/Rph, axis=0)
+        
+    return jax.vmap(func_inner_int_single)(eps) # no unit
+
+# Auxiliary function for the opacity tau_2
+def func_inner_int2(pars_nova, eps, t):
+
+    Rph=pars_nova[13]          # au
+    Rsh=func_Rsh(pars_nova, t) # au
+
+    def func_inner_int_single(eps_single):
+        s=jnp.linspace(2.0*Rsh*jnp.sqrt(1.0-eps_single**2), 100.0*Rsh, 1001, axis=0)                                                              # au
+        ds=jnp.diff(s, append=s[-1:, :], axis=0)  
+        r=jnp.sqrt(s**2-2.0*s*Rsh[jnp.newaxis, :]*jnp.sqrt(1.0-eps_single**2)+Rsh[jnp.newaxis, :]**2) # au
+
+        return jnp.sum((1.5*r/Rph)*func_gOPT(r/Rph)*ds/Rph, axis=0)
+        
+    return jax.vmap(func_inner_int_single)(eps) # no unit
+
+# Average opacity tau_1 for gamma rays passing through the shock downstream
+@jax.jit
+def func_tau_ph1(pars_nova, tau_ph, t):
+
+    tau_ph_sparse=tau_ph[:,::10]
+    eps=jnp.linspace(0.001, 0.999999, 1000)
+    deps=jnp.append(jnp.diff(eps), 0.0)
+    inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int1(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
+    tau_ph1=jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps[:, jnp.newaxis, jnp.newaxis]/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
+
+    def interp_tau_ph1(Eg_index):
+        return jnp.interp(t, t[::10], tau_ph1[Eg_index, :], left=0.0, right=0.0) 
+
+    tau_ph1_full=jax.vmap(interp_tau_ph1)(jnp.arange(len(Eg)))
+
+    return tau_ph1_full
+
+# Average opacity tau_2 for gamma rays passing directly into the shock upstream
+@jax.jit
+def func_tau_ph2(pars_nova, tau_ph, t):
+
+    tau_ph_sparse=tau_ph[:,::10]
+    eps=jnp.linspace(0.001, 0.999999, 1000)
+    deps=jnp.append(jnp.diff(eps), 0.0)
+    inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int2(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
+    tau_ph2=jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps[:, jnp.newaxis, jnp.newaxis]/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
+
+    def interp_tau_ph2(Eg_index):
+        return jnp.interp(t, t[::10], tau_ph2[Eg_index, :], left=0.0, right=0.0) 
+
+    tau_ph2_full=jax.vmap(interp_tau_ph2)(jnp.arange(len(Eg)))
+
+    return tau_ph2_full
+
 # Function to calculate the predicted integrated flux
 def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
 
@@ -555,14 +623,14 @@ def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
     fOPT=func_fEtd(UOPT[jnp.newaxis, :],TOPT,0.0,Ebg[:, jnp.newaxis])[jnp.newaxis, :, :] # eV^-1 cm^-3
     tau_ph=jnp.sum(fOPT*sigma_gg*Rph*dEbg, axis=1)
     tau_ph=jnp.where((t<=ter)[jnp.newaxis, :], 0.0, tau_ph)
-    tau_ph1=1.2*tau_ph
-    tau_ph2=2.5*tau_ph
+    tau_ph1=-jnp.log(func_tau_ph1(pars_nova, tau_ph, t))
+    tau_ph2=-jnp.log(func_tau_ph2(pars_nova, tau_ph, t))
 
     # Calculate the gamma-ray spectrum
     phi_PPI=jnp.sum((4.0*rho/(4.0*np.pi*Ds**2*mpCGS))*(dE*JEp*eps_nucl)*d_sigma_g, axis=0)
     phi_PPI=phi_PPI*(0.5*(jnp.exp(-tau_ph1)+jnp.exp(-tau_ph2)))
 
-    return phi_PPI, tau_ph
+    return phi_PPI, tau_ph, tau_ph1, tau_ph2
 
 
 ############################################################################################################################################
@@ -593,7 +661,7 @@ def func_loss(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
 ############################################################################################################################################
 
 # Plot gamma-ray data
-def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
+def plot_gamma(pars_nova, phi_PPI, tau_ph1, tau_ph2, Eg, t, t_day):
 
     it=np.argmin(np.abs(t-t_day))
 
@@ -631,12 +699,7 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
                 xytext=(E_HESS_upper[i], flux_HESS_upper[i] * 0.5),  # Move arrow downward further
                 arrowprops=dict(arrowstyle="<-", color='black', lw=2))
 
-    Rph=pars_nova[13]
-    Rsh=func_Rsh(pars_nova, t)
-    tau_gg1=tau_gg*Rsh[np.newaxis,:]/Rph
-    tau_gg2=tau_gg1+2.0*3.7*tau_gg*Rsh[np.newaxis,:]/Rph
-
-    ax.plot(Eg*1.0e-9,Eg**2*phi_PPI[:,it]*1.6022e-12/(0.5*(np.exp(-tau_gg1[:,it])+np.exp(-tau_gg2[:,it]))),'k--',linewidth=5.0)
+    ax.plot(Eg*1.0e-9,Eg**2*phi_PPI[:,it]*1.6022e-12/(0.5*(np.exp(-tau_ph1[:,it])+np.exp(-tau_ph2[:,it]))),'k--',linewidth=5.0)
     ax.plot(Eg*1.0e-9,Eg**2*phi_PPI[:,it]*1.6022e-12,'k-',linewidth=5.0)
 
     # # Read the image for data    
@@ -668,7 +731,7 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
     plt.savefig('Results_jax_wiad/fg_gamma_day%d_DM23.png' % (t_day))
 
 # Plot time profile of gamma-ray integrated flux
-def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
+def plot_time_gamma(pars_nova, phi_PPI, tau_ph1, tau_ph2, Eg, t):
 
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
@@ -683,12 +746,7 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
     flux_FLAT_PPI=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
     flux_HESS_PPI=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
 
-    Rph=pars_nova[13]
-    Rsh=func_Rsh(pars_nova, t)
-    tau_gg1=tau_gg*Rsh[np.newaxis,:]/Rph
-    tau_gg2=tau_gg1+2.0*3.7*tau_gg*Rsh[np.newaxis,:]/Rph
-
-    phi_PPI*=1.0/(0.5*(np.exp(-tau_gg1)+np.exp(-tau_gg2)))
+    phi_PPI*=1.0/(0.5*(np.exp(-tau_ph1)+np.exp(-tau_ph2)))
     flux_FLAT_PPI_noabs=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
     flux_HESS_PPI_noabs=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
     ax.plot(t,flux_HESS_PPI_noabs,'r--',linewidth=3.0)
@@ -827,11 +885,11 @@ if __name__ == "__main__":
         pars_best=pars_nova#jnp.array([vsh0, sub_best[0], alpha, sub_best[1], vwind, Rmin, xip, delta, epsilon, ter, sub_best[2], TOPT, Ds])
         print(pars_best[1], pars_nova[3], pars_nova[10])
 
-        phi_PPI, tau_ph=func_phi_PPI(pars_best, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
-        plot_gamma(pars_best, phi_PPI, tau_ph, Eg, t, 1.6)
-        plot_gamma(pars_best, phi_PPI, tau_ph, Eg, t, 3.6)
-        plot_gamma(pars_best, phi_PPI, tau_ph, Eg, t, 5.6)
-        plot_time_gamma(pars_best, phi_PPI, tau_ph, Eg, t)
+        phi_PPI, tau_ph, tau_ph1, tau_ph2=func_phi_PPI(pars_best, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
+        plot_gamma(pars_best, phi_PPI, tau_ph1, tau_ph2, Eg, t, 1.6)
+        plot_gamma(pars_best, phi_PPI, tau_ph1, tau_ph2, Eg, t, 3.6)
+        plot_gamma(pars_best, phi_PPI, tau_ph1, tau_ph2, Eg, t, 5.6)
+        plot_time_gamma(pars_best, phi_PPI, tau_ph1, tau_ph2, Eg, t)
         np.savez('tau_ph.npz', Eg=Eg, t=t, tau_ph=tau_ph)
 
         t_data, LOPT_data=np.loadtxt("Data/LOPT.dat",unpack=True,usecols=[0,1])
