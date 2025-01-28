@@ -74,37 +74,31 @@ def func_Rsh(pars_nova, t):
 
 #     return result
 
+def func_gopt(x):
+    return (1.0/x)-((1.0/x**2)-1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
+
+
+def func_inner_int(pars_nova, eps, t):
+
+    Rsh=func_Rsh(pars_nova, t)[jnp.newaxis, :]
+    s=jnp.linspace(0.0, 50.0, 1000)
+    ds=s[1]-s[0]
+
+    def func_inner_int_single(eps_single):
+        r=jnp.sqrt(s[:, jnp.newaxis]**2-2.0*s[:, jnp.newaxis]*Rsh*jnp.sqrt(1.0-eps_single**2)+Rsh**2)
+        return jnp.sum((1.5*r/Rph)*func_gopt(r/Rph)*ds/Rph, axis=0)
+        
+    return jax.vmap(func_inner_int_single)(eps)
+
+
 @jax.jit
-def func_tau_ph1(pars_nova, tau_ph, Eg, t):
+def func_tau_ph1(pars_nova, tau_ph, t):
 
-    # Rsh=jnp.tile(func_Rsh(pars_nova, t[::10]), (len(Eg), 1)).ravel() # au 
-    tau_ph_sparse=tau_ph[:,::10].ravel()                             # no unit        
-    Rsh=1.0 # jnp.ones(len(tau_ph_sparse))
-
-    def func_tau_full_single(combine_index):
-        def func_inner_int(eps):
-
-            def func_r(eps, s):
-                return jnp.sqrt(s**2-2.0*s*Rsh*jnp.sqrt(1.0-eps**2)+Rsh**2)
-
-            def func_gopt(x):
-                return (1.0/x)-((1.0/x**2)-1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
-            
-            s=jnp.linspace(0.0, 100.0*Rsh, 5000)
-            ds=s[1]-s[0]#jnp.append(jnp.diff(s),0)
-            inner_int=jnp.sum((3*func_r(eps, s)/(2*Rph))*func_gopt(func_r(eps, s)/Rph)*ds/Rph)
-            
-            return jnp.exp(-tau_ph_sparse[combine_index]*inner_int)
-
-        eps=jnp.linspace(0.001, 0.999, 1000)
-        deps=jnp.append(jnp.diff(eps), 0.0)
-        inner_int=jax.vmap(func_inner_int)(eps)
-        result=jnp.sum(inner_int*eps*deps/jnp.sqrt(1.0-eps**2))+inner_int[-1]*jnp.sqrt(1.0-0.999**2)
-
-        return result
-
-    tau_ph1=jax.vmap(func_tau_full_single)(jnp.arange(len(tau_ph_sparse)))
-    tau_ph1=tau_ph1.reshape(tau_ph[:,::10].shape)
+    tau_ph_sparse=tau_ph[:,::10]
+    eps=jnp.linspace(0.001, 0.99999, 1000)
+    deps=eps[1]-eps[0]
+    inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
+    tau_ph1=jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
 
     # def interp_tau_ph1(Eg_index):
     #     return jnp.interp(t, t[::10], tau_ph1[Eg_index, :], left=0.0, right=0.0) 
@@ -113,41 +107,41 @@ def func_tau_ph1(pars_nova, tau_ph, Eg, t):
 
     return tau_ph1 # tau_ph1_full
 
-@jax.jit
-def func_tau_ph2(pars_nova, tau_ph, Eg, t):
+# @jax.jit
+# def func_tau_ph2(pars_nova, tau_ph, Eg, t):
     
-    def func_tau_full_single(Rsh_single, tau_ph_single):
-        def func_inner_int(eps):
+#     def func_tau_full_single(Rsh_single, tau_ph_single):
+#         def func_inner_int(eps):
 
-            def func_r(eps, s):
-                return jnp.sqrt(s**2-2.0*s*Rsh_single*jnp.sqrt(1.0-eps**2)+Rsh_single**2)
+#             def func_r(eps, s):
+#                 return jnp.sqrt(s**2-2.0*s*Rsh_single*jnp.sqrt(1.0-eps**2)+Rsh_single**2)
 
-            def func_gopt(x):
-                return (1.0/x)-((1.0/x**2)-1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
+#             def func_gopt(x):
+#                 return (1.0/x)-((1.0/x**2)-1.0)*jnp.log(jnp.sqrt(jnp.abs((x-1.0)/(x+1.0))))
             
-            s=jnp.linspace(2.0*Rsh_single*jnp.sqrt(1.0-eps**2), 100.0*Rsh_single, 5000)
-            ds=s[1]-s[0]#jnp.append(jnp.diff(s),0)
-            inner_int=jnp.sum((3*func_r(eps, s)/(2*Rph))*func_gopt(func_r(eps, s)/Rph)*ds/Rph)
+#             s=jnp.linspace(2.0*Rsh_single*jnp.sqrt(1.0-eps**2), 100.0*Rsh_single, 5000)
+#             ds=s[1]-s[0]#jnp.append(jnp.diff(s),0)
+#             inner_int=jnp.sum((3*func_r(eps, s)/(2*Rph))*func_gopt(func_r(eps, s)/Rph)*ds/Rph)
             
-            return jnp.exp(-tau_ph_single*inner_int)
+#             return jnp.exp(-tau_ph_single*inner_int)
 
-        eps=jnp.linspace(0.001, 0.999, 1000)
-        deps=jnp.append(jnp.diff(eps), 0.0)
-        inner_int=jax.vmap(func_inner_int)(eps)
-        result=jnp.sum(inner_int*eps*deps/jnp.sqrt(1.0-eps**2))+inner_int[-1]*jnp.sqrt(1.0-0.999**2)
+#         eps=jnp.linspace(0.001, 0.999, 1000)
+#         deps=jnp.append(jnp.diff(eps), 0.0)
+#         inner_int=jax.vmap(func_inner_int)(eps)
+#         result=jnp.sum(inner_int*eps*deps/jnp.sqrt(1.0-eps**2))+inner_int[-1]*jnp.sqrt(1.0-0.999**2)
 
-        return result
+#         return result
 
-    Rsh=jnp.tile(func_Rsh(pars_nova, t[::10]), (len(Eg), 1)) # au 
-    tau_ph2=jax.vmap(func_tau_full_single)(Rsh.ravel(), tau_ph[:,::10].ravel())
-    tau_ph2=tau_ph2.reshape(tau_ph[:,::10].shape)
+#     Rsh=jnp.tile(func_Rsh(pars_nova, t[::10]), (len(Eg), 1)) # au 
+#     tau_ph2=jax.vmap(func_tau_full_single)(Rsh.ravel(), tau_ph[:,::10].ravel())
+#     tau_ph2=tau_ph2.reshape(tau_ph[:,::10].shape)
 
-    def interp_tau_ph2(Eg_index):
-        return jnp.interp(t, t[::10], tau_ph2[Eg_index, :], left=0.0, right=0.0) 
+#     def interp_tau_ph2(Eg_index):
+#         return jnp.interp(t, t[::10], tau_ph2[Eg_index, :], left=0.0, right=0.0) 
 
-    tau_ph2_full=jax.vmap(interp_tau_ph2)(jnp.arange(len(Eg)))
+#     tau_ph2_full=jax.vmap(interp_tau_ph2)(jnp.arange(len(Eg)))
 
-    return tau_ph2_full
+#     return tau_ph2_full
 
 if __name__ == "__main__":
 
@@ -176,8 +170,17 @@ if __name__ == "__main__":
 
     # print(jnp.tile(func_Rsh(pars_nova, t), (len(Eg), 1)).shape)
 
-    tau_ph1=func_tau_ph1(pars_nova, tau_ph, Eg, t)
-    # tau_ph2=func_tau_ph2(pars_nova, tau_ph, Eg, t)
+    tau_ph_sparse=tau_ph[:,::10]
+    # print(tau_ph_sparse)
+    eps=jnp.linspace(0.001, 0.99999, 1000)
+    deps=eps[1]-eps[0]
+    inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
+    # print('hj', inner_int)
+    # print(func_inner_int(pars_nova,eps,t[::10]))
+    print(jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps/jnp.sqrt(1.0-eps[:, jnp.newaxis, jnp.newaxis]**2), axis=0))
+
+    tau_ph1=func_tau_ph1(pars_nova, tau_ph, t)
+    # # tau_ph2=func_tau_ph2(pars_nova, tau_ph, Eg, t)
 
     it=150
     print(t[it])
