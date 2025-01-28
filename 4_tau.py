@@ -81,7 +81,7 @@ def func_gopt(x):
 def func_inner_int(pars_nova, eps, t):
 
     Rsh=func_Rsh(pars_nova, t)[jnp.newaxis, :]
-    s=jnp.linspace(0.0, 50.0, 1000)
+    s=jnp.linspace(0.0, 200.0, 2001)
     ds=s[1]-s[0]
 
     def func_inner_int_single(eps_single):
@@ -95,17 +95,18 @@ def func_inner_int(pars_nova, eps, t):
 def func_tau_ph1(pars_nova, tau_ph, t):
 
     tau_ph_sparse=tau_ph[:,::10]
-    eps=jnp.linspace(0.001, 0.99999, 1000)
-    deps=eps[1]-eps[0]
-    inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
-    tau_ph1=jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
+    eps=jnp.linspace(0.001, 0.999999, 2000)
+    deps=jnp.append(jnp.diff(eps), 0.0)
+    inner_int=jnp.exp(-0.0*tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
+    tau_ph1=jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps[:, jnp.newaxis, jnp.newaxis]/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
+    # tau_ph1=jnp.sum(eps[:, jnp.newaxis, jnp.newaxis]*deps/jnp.sqrt(1.0-(eps[:, jnp.newaxis, jnp.newaxis])**2), axis=0)
 
-    # def interp_tau_ph1(Eg_index):
-    #     return jnp.interp(t, t[::10], tau_ph1[Eg_index, :], left=0.0, right=0.0) 
+    def interp_tau_ph1(Eg_index):
+        return jnp.interp(t, t[::10], tau_ph1[Eg_index, :], left=0.0, right=0.0) 
 
-    # tau_ph1_full=jax.vmap(interp_tau_ph1)(jnp.arange(len(Eg)))
+    tau_ph1_full=jax.vmap(interp_tau_ph1)(jnp.arange(len(Eg)))
 
-    return tau_ph1 # tau_ph1_full
+    return tau_ph1_full
 
 # @jax.jit
 # def func_tau_ph2(pars_nova, tau_ph, Eg, t):
@@ -170,21 +171,21 @@ if __name__ == "__main__":
 
     # print(jnp.tile(func_Rsh(pars_nova, t), (len(Eg), 1)).shape)
 
-    tau_ph_sparse=tau_ph[:,::10]
-    # print(tau_ph_sparse)
-    eps=jnp.linspace(0.001, 0.99999, 1000)
-    deps=eps[1]-eps[0]
-    inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
-    # print('hj', inner_int)
-    # print(func_inner_int(pars_nova,eps,t[::10]))
-    print(jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps/jnp.sqrt(1.0-eps[:, jnp.newaxis, jnp.newaxis]**2), axis=0))
+    # tau_ph_sparse=tau_ph[:,::10]
+    # # print(tau_ph_sparse)
+    # eps=jnp.linspace(0.001, 0.99999, 1000)
+    # deps=eps[1]-eps[0]
+    # inner_int=jnp.exp(-tau_ph_sparse[jnp.newaxis,:,:]*func_inner_int(pars_nova, eps, t[::10])[:,jnp.newaxis,:])
+    # # print('hj', inner_int)
+    # # print(func_inner_int(pars_nova,eps,t[::10]))
+    # print(jnp.sum(inner_int*eps[:, jnp.newaxis, jnp.newaxis]*deps/jnp.sqrt(1.0-eps[:, jnp.newaxis, jnp.newaxis]**2), axis=0))
 
     tau_ph1=func_tau_ph1(pars_nova, tau_ph, t)
-    # # tau_ph2=func_tau_ph2(pars_nova, tau_ph, Eg, t)
+    # # # tau_ph2=func_tau_ph2(pars_nova, tau_ph, Eg, t)
 
-    it=150
+    it=110
     print(t[it])
-    print(tau_ph[30,it], tau_ph1[30,it]) #, tau_ph2[30,it])
+    print(tau_ph[30,it], func_Rsh(pars_nova,t[it]), Rph, tau_ph1[30,it]) #, tau_ph2[30,it])
 
     # print(tau_ph[30,it], tau_ph1[30,it], tau_ph2[30,it])
     # # print(func_tau_test1(func_Rsh(pars_nova, t)[it], tau_ph[30,it], 0.001, 0.999999))
