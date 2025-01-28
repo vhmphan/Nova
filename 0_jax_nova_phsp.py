@@ -114,12 +114,11 @@ def func_vsh(pars_nova, t):
     smoothing_factor=500.0
     mask1=0.5*(1.0+jnp.tanh(smoothing_factor*tau))
     mask2=0.5*(1.0+jnp.tanh(smoothing_factor*(tau-tauST)))
-    mask3=0.5*(1.0+jnp.tanh(1.0e-2*smoothing_factor*(3.0-tau)))
 
     # Shock speed
-    vsh=mask1*vsh0*(tau/tauST)**-(mask2*alpha) # -1.0e3*mask3
+    vsh=mask1*vsh0*(tau/tauST)**-(mask2*alpha)
     
-    return vsh
+    return vsh # km/s
 
 # Nova shock radius
 def func_Rsh(pars_nova, t):
@@ -475,27 +474,26 @@ def func_LOPT(t):
     return LOPT # erg s^-1
 
 # Auxiliary function for energy density of optical photons
-def func_gopt(x):
+def func_gOPT(x):
 # x=r/Rsh
-    return (1.0/x)+((1.0/x**2)-1.0)*np.log(np.sqrt(np.abs((x+1.0)/(x-1.0))))
+    return (1.0/x)-((1.0/x**2)-1.0)*np.log(np.sqrt(np.abs((x-1.0)/(x+1.0))))
 
-# Energy density of optical photons for modified profile 
-def func_uOPT_rt(pars_nova, r, eta, t):
+# Energy density of optical photons assuming optical photons are uniformly emitted with the photosphere of radius Rph
+def func_uOPT_rt(pars_nova, r, t):
 
-    LOPT=func_LOPT(t)
-    uOPT=LOPT/(4.0*np.pi*(r*1.496e13)**2*3.0e10)
+    LOPT=func_LOPT(t)                            # erg/s
+    uOPT=LOPT/(4.0*np.pi*(r*1.496e13)**2*3.0e10) # erg/cm^3
+    Rph=pars_nova[13]                            # au
     
-    Rsh=func_Rsh(pars_nova,t)
-    # uOPT*=1.5*(r/Rsh)**3*((Rsh/r)+((Rsh/r)**2-1.0)*np.log(np.sqrt(abs((r+Rsh)/(r-Rsh)))))
-    uOPT*=1.5*(r/Rsh)**3*(func_gopt(r/Rsh)-func_gopt(r/(eta*Rsh)))/(1.0-eta**3)
+    uOPT*=1.5*(r/Rph)**3*func_gOPT(r/Rph)
 
     return uOPT # erg/cm^3
 
 # Energy density of optical photons for 1/r^2 profile 
 def func_uOPT_r2(pars_nova, r, t):
 
-    LOPT=func_LOPT(t)
-    uOPT=LOPT/(4.0*np.pi*(r*1.496e13)**2*3.0e10)
+    LOPT=func_LOPT(t)                            # erg/s
+    uOPT=LOPT/(4.0*np.pi*(r*1.496e13)**2*3.0e10) # erg/cm^3
     
     return uOPT # erg/cm^3
 
@@ -536,7 +534,9 @@ def func_fEtd(Urad, Trad, sigma, Ebg):
 # Function to calculate the predicted integrated flux
 def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
 
+    # Parameters for nova shocks
     ter=pars_nova[9]                                             # day
+    Rph=pars_nova[13]*1.496e13                                   # cm
     dE=jnp.append(jnp.diff(E), 0.0)[:, jnp.newaxis, jnp.newaxis] # eV
 
     # Distance from the nova to Earth
@@ -551,16 +551,18 @@ def func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
     TOPT=kB*pars_nova[11]                                                                # eV
     Ebg=jnp.logspace(jnp.log10(TOPT*1.0e-2), jnp.log10(TOPT*1.0e2), 1000)                # eV
     dEbg=jnp.append(jnp.diff(Ebg), 0.0)[jnp.newaxis, :, jnp.newaxis]                     # eV
-    UOPT=((pars_nova[12]/1.6e3)**2)*func_LOPT(t)*6.242e11/(4.0*jnp.pi*pow(Rsh,2)*3.0e10)                            # eV cm^⁻3
+    UOPT=((pars_nova[12]/1.6e3)**2)*func_LOPT(t)*6.242e11/(4.0*jnp.pi*pow(Rph,2)*3.0e10)                            # eV cm^⁻3
     fOPT=func_fEtd(UOPT[jnp.newaxis, :],TOPT,0.0,Ebg[:, jnp.newaxis])[jnp.newaxis, :, :] # eV^-1 cm^-3
-    tau_gg=jnp.sum(fOPT*sigma_gg*Rsh[jnp.newaxis, jnp.newaxis, :]*dEbg, axis=1)
-    tau_gg=jnp.where((t<=ter)[jnp.newaxis, :], 0.0, tau_gg)
+    tau_ph=jnp.sum(fOPT*sigma_gg*Rph*dEbg, axis=1)
+    tau_ph=jnp.where((t<=ter)[jnp.newaxis, :], 0.0, tau_ph)
+    tau_ph1=1.2*tau_ph
+    tau_ph2=2.5*tau_ph
 
     # Calculate the gamma-ray spectrum
     phi_PPI=jnp.sum((4.0*rho/(4.0*np.pi*Ds**2*mpCGS))*(dE*JEp*eps_nucl)*d_sigma_g, axis=0)
-    phi_PPI=phi_PPI*(0.5*(jnp.exp(-1.15*tau_gg)+jnp.exp(-4.18*tau_gg)))
+    phi_PPI=phi_PPI*(0.5*(jnp.exp(-tau_ph1)+jnp.exp(-tau_ph2)))
 
-    return phi_PPI, tau_gg
+    return phi_PPI, tau_ph
 
 
 ############################################################################################################################################
@@ -629,7 +631,12 @@ def plot_gamma(pars_nova, phi_PPI, tau_gg, Eg, t, t_day):
                 xytext=(E_HESS_upper[i], flux_HESS_upper[i] * 0.5),  # Move arrow downward further
                 arrowprops=dict(arrowstyle="<-", color='black', lw=2))
 
-    ax.plot(Eg*1.0e-9,Eg**2*phi_PPI[:,it]*1.6022e-12/(0.5*(np.exp(-1.15*tau_gg[:,it])+np.exp(-4.18*tau_gg[:,it]))),'k--',linewidth=5.0)
+    Rph=pars_nova[13]
+    Rsh=func_Rsh(pars_nova, t)
+    tau_gg1=tau_gg*Rsh[np.newaxis,:]/Rph
+    tau_gg2=tau_gg1+2.0*3.7*tau_gg*Rsh[np.newaxis,:]/Rph
+
+    ax.plot(Eg*1.0e-9,Eg**2*phi_PPI[:,it]*1.6022e-12/(0.5*(np.exp(-tau_gg1[:,it])+np.exp(-tau_gg2[:,it]))),'k--',linewidth=5.0)
     ax.plot(Eg*1.0e-9,Eg**2*phi_PPI[:,it]*1.6022e-12,'k-',linewidth=5.0)
 
     # # Read the image for data    
@@ -676,7 +683,12 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_gg, Eg, t):
     flux_FLAT_PPI=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
     flux_HESS_PPI=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
 
-    phi_PPI*=1.0/(0.5*(np.exp(-1.15*tau_gg)+np.exp(-4.18*tau_gg)))
+    Rph=pars_nova[13]
+    Rsh=func_Rsh(pars_nova, t)
+    tau_gg1=tau_gg*Rsh[np.newaxis,:]/Rph
+    tau_gg2=tau_gg1+2.0*3.7*tau_gg*Rsh[np.newaxis,:]/Rph
+
+    phi_PPI*=1.0/(0.5*(np.exp(-tau_gg1)+np.exp(-tau_gg2)))
     flux_FLAT_PPI_noabs=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
     flux_HESS_PPI_noabs=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
     ax.plot(t,flux_HESS_PPI_noabs,'r--',linewidth=3.0)
@@ -733,7 +745,8 @@ if __name__ == "__main__":
     TOPT=1.0e4                       # K       -> Temperature of the optical photons 
     ter=0.0                          # day     -> Shock formation time
     Ds=2.45e3 #1.4e3                 # pc      -> Distance to Earth of the nova
-    pars_nova=jnp.array([vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, ter, BRG, TOPT, Ds])
+    Rph=200.0*0.00465                # au      -> Photospheric radius of the nova
+    pars_nova=jnp.array([vsh0, tST, alpha, Mdot, vwind, Rmin, xip, delta, epsilon, ter, BRG, TOPT, Ds, Rph])
 
     # Define the time and energy ranges -> note that it is required that t[0]<=ter 
     # t=jnp.linspace(0.0,6.0,601) # day
@@ -814,25 +827,24 @@ if __name__ == "__main__":
         pars_best=pars_nova#jnp.array([vsh0, sub_best[0], alpha, sub_best[1], vwind, Rmin, xip, delta, epsilon, ter, sub_best[2], TOPT, Ds])
         print(pars_best[1], pars_nova[3], pars_nova[10])
 
-        phi_PPI, tau_gg=func_phi_PPI(pars_best, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
-        plot_gamma(pars_best, phi_PPI, tau_gg, Eg, t, 1.6)
-        # plot_gamma(pars_best, phi_PPI, tau_gg, Eg, t, 2.6)
-        plot_gamma(pars_best, phi_PPI, tau_gg, Eg, t, 3.6)
-        # plot_gamma(pars_best, phi_PPI, tau_gg, Eg, t, 4.6)
-        plot_gamma(pars_best, phi_PPI, tau_gg, Eg, t, 5.6)
-        plot_time_gamma(pars_best, phi_PPI, tau_gg, Eg, t)
+        phi_PPI, tau_ph=func_phi_PPI(pars_best, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
+        plot_gamma(pars_best, phi_PPI, tau_ph, Eg, t, 1.6)
+        plot_gamma(pars_best, phi_PPI, tau_ph, Eg, t, 3.6)
+        plot_gamma(pars_best, phi_PPI, tau_ph, Eg, t, 5.6)
+        plot_time_gamma(pars_best, phi_PPI, tau_ph, Eg, t)
+        np.savez('tau_ph.npz', Eg=Eg, t=t, tau_ph=tau_ph)
 
         t_data, LOPT_data=np.loadtxt("Data/LOPT.dat",unpack=True,usecols=[0,1])
 
         fig=plt.figure(figsize=(10, 8))
         ax=plt.subplot(111)
 
-        t=np.linspace(-10,30,1000)
-        Lsh=2.0*np.pi*func_rho(pars_best, t)*(func_Rsh(pars_best, t)*1.496e13)**2*(func_vsh(pars_best, t)*1.0e5)**3
+        t_plot_OPT=np.linspace(-10,30,1000)
+        Lsh=2.0*np.pi*func_rho(pars_best, t_plot_OPT)*(func_Rsh(pars_best, t_plot_OPT)*1.496e13)**2*(func_vsh(pars_best, t_plot_OPT)*1.0e5)**3
 
         ax.errorbar(t_data-0.25,LOPT_data,yerr=LOPT_data*0.0,xerr=t_data*0.0,fmt='s',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='orange',markeredgecolor='black',markersize=15,label=r'${\rm Optical\,(\times 10^{-4})}$')
-        ax.plot(t,func_LOPT(t),'k--',linewidth=3.0,label=r'${\rm Optical}$')
-        ax.plot(t,Lsh,'r:')
+        ax.plot(t_plot_OPT,func_LOPT(t_plot_OPT),'k--',linewidth=3.0,label=r'${\rm Optical}$')
+        ax.plot(t_plot_OPT,Lsh,'r:')
 
         ax.legend()
         ax.set_yscale('log')
@@ -1052,17 +1064,13 @@ if __name__ == "__main__":
     ax=plt.subplot(111)
 
     r=np.logspace(-1,2,100)
-    t=np.array([1.6])
-    Rsh=func_Rsh(pars_nova,t)
-    print(Rsh)
 
     ax.plot(r,func_uOPT_r2(pars_nova,r,np.array([1.6])),'r-',linewidth=3.0)
     ax.plot(r,func_uOPT_r2(pars_nova,r,np.array([3.6])),'g-',linewidth=3.0)
     ax.plot(r,func_uOPT_r2(pars_nova,r,np.array([5.6])),'-', color='orange', linewidth=3.0)
-    # ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,t),'r--',linewidth=3.0,label=r'${\rm Eq.\,14}$')
-    ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,t),'r--',linewidth=5.0, label=r'${\rm Day\, 1}$')
-    ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,np.array([3.6])),'g--',linewidth=5.0, label=r'${\rm Day\, 3}$')
-    ax.plot(r,func_uOPT_rt(pars_nova,r,0.75,np.array([5.6])),'--', color='orange',linewidth=5.0, label=r'${\rm Day\, 5}$')
+    ax.plot(r,func_uOPT_rt(pars_nova,r,np.array([1.6])),'r--',linewidth=5.0, label=r'${\rm Day\, 1}$')
+    ax.plot(r,func_uOPT_rt(pars_nova,r,np.array([3.6])),'g--',linewidth=5.0, label=r'${\rm Day\, 3}$')
+    ax.plot(r,func_uOPT_rt(pars_nova,r,np.array([5.6])),'--', color='orange',linewidth=5.0, label=r'${\rm Day\, 5}$')
 
     ax.legend()
     # ax.set_xscale('log')
@@ -1083,6 +1091,32 @@ if __name__ == "__main__":
 
     plt.savefig('Results_jax_wiad/fg_uOPT.png')
 
+
+    fig=plt.figure(figsize=(10, 8))
+    ax=plt.subplot(111)
+
+    iplot1=np.where(np.abs(Eg-100.0e9)==np.min(np.abs(Eg-100.0e9)))
+    iplot2=np.where(np.abs(Eg-1000.0e9)==np.min(np.abs(Eg-1000.0e9)))
+
+    print(iplot1, Eg[iplot1])
+    print(iplot2, Eg[iplot2])
+
+    ax.plot(t,tau_ph[30,:],'r-',linewidth=3.0,label=r'$E_\gamma=100\,{\rm GeV}$')
+    ax.plot(t,tau_ph[40,:],'g--',linewidth=3.0,label=r'$E_\gamma=1000\,{\rm GeV}$')
+
+    ax.set_xlim(0.0,30.0)
+    ax.set_yscale('log')
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
+    ax.set_ylabel(r'$\tau_{\gamma\gamma}$',fontsize=fs)
+    for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
+        label_ax.set_fontsize(fs)
+    ax.legend(loc='upper right', prop={"size":fs})
+    ax.grid(linestyle='--')
+
+    plt.savefig('Results_jax_wiad/fg_tau_ph.png')
+
+
+
     # Record the ending time
     end_time=time.time()
 
@@ -1090,4 +1124,3 @@ if __name__ == "__main__":
     elapsed_time=end_time-start_time
 
     print("Elapsed time:", elapsed_time, "seconds")
-    print(func_Rsh(pars_nova, 2.0))
