@@ -619,7 +619,8 @@ def func_tau_ph1(pars_nova, tau_ph, t):
     def interp_tau_ph1(Eg_index):
         return jnp.interp(t, t[::10], tau_ph1[Eg_index, :], left=0.0, right=0.0) 
 
-    tau_ph1_full=jax.vmap(interp_tau_ph1)(jnp.arange(len(Eg)))
+    NEg, _=tau_ph.shape
+    tau_ph1_full=jax.vmap(interp_tau_ph1)(jnp.arange(NEg))
 
     return tau_ph1_full
 
@@ -636,7 +637,8 @@ def func_tau_ph2(pars_nova, tau_ph, t):
     def interp_tau_ph2(Eg_index):
         return jnp.interp(t, t[::10], tau_ph2[Eg_index, :], left=0.0, right=0.0) 
 
-    tau_ph2_full=jax.vmap(interp_tau_ph2)(jnp.arange(len(Eg)))
+    NEg, _=tau_ph.shape
+    tau_ph2_full=jax.vmap(interp_tau_ph2)(jnp.arange(NEg))
 
     return tau_ph2_full
 
@@ -910,14 +912,14 @@ def plot_vsh(pars_nova, t):
     plt.close()
 
 # Plot the optical luminosity 
-def plot_LOPT():
+def plot_LOPT(pars_nova):
     t_data, LOPT_data=np.loadtxt("Data/LOPT.dat",unpack=True,usecols=[0,1])
 
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
 
     t_plot_OPT=np.linspace(-10,30,1000)
-    Lsh=2.0*np.pi*func_rho(pars_best, t_plot_OPT)*(func_Rsh(pars_best, t_plot_OPT)*1.496e13)**2*(func_vsh(pars_best, t_plot_OPT)*1.0e5)**3
+    Lsh=2.0*np.pi*func_rho(pars_nova, t_plot_OPT)*(func_Rsh(pars_nova, t_plot_OPT)*1.496e13)**2*(func_vsh(pars_nova, t_plot_OPT)*1.0e5)**3
 
     ax.errorbar(t_data-0.25,LOPT_data,yerr=LOPT_data*0.0,xerr=t_data*0.0,fmt='s',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='orange',markeredgecolor='black',markersize=15,label=r'${\rm Optical\,(\times 10^{-4})}$')
     ax.plot(t_plot_OPT,func_LOPT(t_plot_OPT),'k--',linewidth=3.0,label=r'${\rm Optical}$')
@@ -984,7 +986,7 @@ def plot_flux_OPT(pars_nova, t):
     plt.savefig('Results_jax_wiad/fg_flux_lambda.png')
 
 # Plot the gamma-ray opacity
-def plot_tau_ph(pars_nova, tau_ph1, tau_ph2, t):
+def plot_tau_ph(pars_nova, tau_ph1, tau_ph2, Eg, t):
 
     Rph=pars_nova[13]*1.496e13 # cm
 
