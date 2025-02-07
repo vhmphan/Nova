@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from jax.experimental.ode import odeint
 from scipy.integrate import solve_ivp
-import gato.pack_gato as gt
 from jax import jit
 import matplotlib.ticker as ticker
 import diffrax
