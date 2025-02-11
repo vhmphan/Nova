@@ -70,7 +70,7 @@ hP=4.1356676966e-15 # eV s
 
 
 ############################################################################################################################################
-# Prepare data from HESS and FERMI
+# Prepare data from HESS and FERMI and optical luminosity
 ############################################################################################################################################
 
 t_HESS_raw, flux_HESS_raw=np.loadtxt('Data/data_time_gamma_HESS_raw.dat',unpack=True,usecols=[0,1])
@@ -90,6 +90,8 @@ xerr_FERMI_raw=t_FERMI_raw[:,0]-t_FERMI_raw[:,1]
 yerr_FERMI_raw=flux_FERMI_raw[:,0]-flux_FERMI_raw[:,3]
 t_FERMI_raw=t_FERMI_raw[:,0]
 flux_FERMI_raw=flux_FERMI_raw[:,0]
+
+t_data, LOPT_data=np.loadtxt("Data/LOPT.dat",unpack=True,usecols=[0,1])
 
 
 ############################################################################################################################################
@@ -469,7 +471,8 @@ def func_LOPT(t):
     mask=0.5*(1.0+jnp.tanh(smoothing_factor*(t-0.88)))
 
     # Luminosity function fitted with data from Cheung et al. 2022
-    LOPT=2.5e36+mask*3.9e38*(t/2.0)**(-mask)
+    # LOPT=2.5e36+mask*3.9e38*(t/2.0)**(-mask)
+    LOPT=2.5e36+mask*7.8e38*(t/1.0)**(-mask)
 
     return LOPT # erg s^-1
 
@@ -478,10 +481,12 @@ def func_LOPT_new(t):
 
     # Smooth masks using tanh functions
     smoothing_factor=40.0
-    mask1=0.5*(1.0+jnp.tanh(smoothing_factor*(t-0.88)))
+    mask=0.5*(1.0+jnp.tanh(smoothing_factor*(t-0.88)))
 
-    # Luminosity function fitted with data from Cheung et al. 2022
-    LOPT=2.5e36+mask1*7.8e38*(t/1.0)**(-mask1)
+    t_data_interp=t_data-0.25
+    LOPT_data_interp=LOPT_data[t_data_interp>0.0]
+    t_data_interp=t_data_interp[t_data_interp>0.0]
+    LOPT=jnp.where(t>=0.0, 2.5e36+mask*jnp.exp(jnp.interp(jnp.log(t), jnp.log(t_data_interp), jnp.log(LOPT_data_interp), left=0.0, right=0.0)), 2.5e36)
 
     return LOPT # erg s^-1
 
@@ -740,6 +745,19 @@ def func_loss(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t):
 
     phi_PPI, _=func_phi_PPI(pars_nova, eps_nucl, d_sigma_g, sigma_gg, E, Eg, t)
 
+    # Preparing data in the same time range as model
+    mask=(t_FERMI_raw<t[-1])
+    t_FERMI_raw=t_FERMI_raw[mask]
+    flux_FERMI_raw=flux_FERMI_raw[mask]
+    yerr_FERMI_raw=yerr_FERMI_raw[mask]
+    xerr_FERMI_raw=xerr_FERMI_raw[mask]
+
+    mask=(t_HESS_raw<t[-1])
+    t_HESS_raw=t_HESS_raw[mask]
+    flux_HESS_raw=flux_HESS_raw[mask]
+    yerr_HESS_raw=yerr_HESS_raw[mask]
+    xerr_HESS_raw=xerr_HESS_raw[mask]
+
     mask_FLAT=(Eg>=0.1e9) & (Eg<=100.0e9)
     mask_HESS=(Eg>=250.0e9) & (Eg<=2500.0e9)
 
@@ -847,25 +865,38 @@ def plot_time_gamma(pars_nova, phi_PPI, tau_ph1, tau_ph2, Eg, t):
     phi_PPI*=1.0/(0.5*(np.exp(-tau_ph1)+np.exp(-tau_ph2)))
     flux_FLAT_PPI_noabs=1.0e-3*1.60218e-12*jnp.sum(jnp.where(mask_FLAT[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
     flux_HESS_PPI_noabs=1.60218e-12*jnp.sum(jnp.where(mask_HESS[:, jnp.newaxis], dEg[:, jnp.newaxis]*Eg[:, jnp.newaxis]*phi_PPI, 0.0), axis=0)
-    ax.plot(t,flux_HESS_PPI_noabs,'r--',linewidth=3.0)
-    ax.plot(t,flux_FLAT_PPI_noabs,'g--',linewidth=3.0)
+    ax.plot(t,flux_HESS_PPI_noabs,'r--',linewidth=5.0)
+    ax.plot(t,flux_FLAT_PPI_noabs,'g--',linewidth=5.0)
 
-    ax.plot(t,flux_HESS_PPI,'r-',linewidth=3.0,label=r'{\rm Model\, HESS\, band}')
-    ax.plot(t,flux_FLAT_PPI,'g-',linewidth=3.0,label=r'{\rm Model\, FERMI\, band}')
+    # ax.plot(t,flux_HESS_PPI,'r-',linewidth=3.0,label=r'{\rm Model\, HESS\, band}')
+    # ax.plot(t,flux_FLAT_PPI,'g-',linewidth=3.0,label=r'{\rm Model\, FERMI\, band}')
+
+    mask1=t>=1.0
+    mask2=t<1.0
+    ax.plot(t[mask1],flux_HESS_PPI[mask1],'r-',linewidth=5.0)
+    ax.plot(t[mask2],flux_HESS_PPI[mask2],'r-',alpha=0.2,linewidth=5.0)
+    ax.plot(t,flux_FLAT_PPI,'g-',linewidth=5.0)
 
     ax.errorbar(t_HESS_raw,flux_HESS_raw,yerr=yerr_HESS_raw,xerr=xerr_HESS_raw,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='red',markeredgecolor='black',markersize=10,label=r'${\rm HESS}$')
     ax.errorbar(t_FERMI_raw,flux_FERMI_raw,yerr=yerr_FERMI_raw,xerr=xerr_FERMI_raw,fmt='o',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='green',markeredgecolor='black',markersize=10,label=r'${\rm FERMI\,(\times 10^{-3})}$')
 
-    ax.set_xlim(1.0e-1,5.0e1)
-    ax.set_ylim(1.0e-13,3.0e-11)
+    ax.set_xlim(5.0e-2,5.0e1)
+    ax.set_ylim(1.0e-13,5.0e-11)
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'${\rm Integrated\, Flux} \, ({\rm erg\, cm^{-2}\, s^{-1}})$',fontsize=fs)
+    ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs,fontweight='bold')
+    ax.set_ylabel(r'${\rm Integrated\, Flux} \, ({\rm erg\, cm^{-2}\, s^{-1}})$',fontsize=fs,fontweight='bold')
     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
         label_ax.set_fontsize(fs)
-    ax.legend(loc='upper left', prop={"size":fs}, ncols=2)
+    ax.legend(loc='upper left', prop={"size":fs}, ncols=1)
     ax.grid(linestyle='--')
+
+    # ax.spines["top"].set_linewidth(2)
+    # ax.spines["bottom"].set_linewidth(2)
+    # ax.spines["left"].set_linewidth(2)
+    # ax.spines["right"].set_linewidth(2)
+    # ax.tick_params(axis='both', which='major', width=2, length=8)
+    # ax.tick_params(axis='both', which='minor', width=1.5, length=5)
 
     plt.savefig('Results_jax_wiad/fg_time_gamma_DM23_tST-%.2f_Mdot-%.2e_ter-%.1f_BRG-%.1f_Ds-%.2f.png' % (pars_nova[1], pars_nova[3], pars_nova[9], pars_nova[10], (pars_nova[12]*1.0e-3)))
     plt.close()
@@ -895,7 +926,7 @@ def plot_vsh(pars_nova, t):
     ax.get_yaxis().set_major_formatter(ticker.FuncFormatter(lambda x, _: r'$%d$' % int(10**x)))
     # ax.set_yticks([1000, 5000])
 
-    ax.set_xlim(1.0,5.0e1)
+    ax.set_xlim(1.0,3.0e1)
     ax.set_ylim(500.0,5000.0)
 
     ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
@@ -920,15 +951,17 @@ def plot_LOPT(pars_nova):
     t_plot_OPT=np.linspace(-10,30,1000)
     Lsh=2.0*np.pi*func_rho(pars_nova, t_plot_OPT)*(func_Rsh(pars_nova, t_plot_OPT)*1.496e13)**2*(func_vsh(pars_nova, t_plot_OPT)*1.0e5)**3
 
-    ax.errorbar(t_data-0.25,LOPT_data,yerr=LOPT_data*0.0,xerr=t_data*0.0,fmt='s',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='orange',markeredgecolor='black',markersize=15,label=r'${\rm Optical\,(\times 10^{-4})}$')
-    ax.plot(t_plot_OPT,func_LOPT(t_plot_OPT),'k--',linewidth=3.0,label=r'${\rm Optical}$')
-    ax.plot(t_plot_OPT,func_LOPT_new(t_plot_OPT),'r:',linewidth=3.0,label=r'${\rm Optical}$')
-    ax.plot(t_plot_OPT,Lsh,'r:')
+    ax.errorbar(t_data-0.25,LOPT_data,yerr=LOPT_data*0.0,xerr=t_data*0.0,fmt='s',capsize=5,ecolor='black',elinewidth=2,markerfacecolor='orange',markeredgecolor='black',markersize=15,label=r'${\rm Cheung\, 2022}$')
+    ax.plot(t_plot_OPT,func_LOPT(t_plot_OPT),'k--',linewidth=3.0)
+    # ax.plot(t_plot_OPT,func_LOPT_new(t_plot_OPT),'r:',linewidth=3.0,label=r'${\rm Optical}$')
+    # ax.plot(t_plot_OPT,Lsh,'r:')
+
+    print(func_LOPT(1.0)-2.5e36)
 
     ax.legend()
     ax.set_yscale('log')
     ax.set_xlim(-5.0,10.0)
-    ax.set_ylim(1.0e36,5.0e39)
+    ax.set_ylim(1.0e36,1.0e39)
     ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
     ax.set_ylabel(r'$L_{\rm opt} \, ({\rm erg\,s^{-1}})$',fontsize=fs)
     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
@@ -946,7 +979,7 @@ def plot_flux_OPT(pars_nova, t):
 
     # Note that here we convert fOPT to dF/dlambda by dF/dlambda = c*E^2*fOPT/lambda
     Ebg=jnp.logspace(jnp.log10(TOPT*1.0e-2), jnp.log10(TOPT*1.0e2), 1000)                # eV
-    UOPT=((pars_nova[12]/1.6e3)**2)*func_LOPT_new(t)*6.242e11/(4.0*jnp.pi*pow(Ds,2)*3.0e10)  # eV cm^⁻3
+    UOPT=((pars_nova[12]/1.6e3)**2)*func_LOPT(t)*6.242e11/(4.0*jnp.pi*pow(Ds,2)*3.0e10)  # eV cm^⁻3
     fOPT=func_fEtd(UOPT[jnp.newaxis, :],TOPT,0.0,Ebg[:, jnp.newaxis])                    # eV^-1 cm^-3 
     lambda_OPT=hP*3.0e10/Ebg                                                             # cm 
     flux_lambda_OPT=(Ebg[:, jnp.newaxis])**3*fOPT*1.6e-12/hP                                 # erg cm^-2 s^-1 cm^-1
@@ -992,7 +1025,7 @@ def plot_tau_ph(pars_nova, tau_ph1, tau_ph2, Eg, t):
     fig=plt.figure(figsize=(10, 8))
     ax=plt.subplot(111)
 
-    iplot1=np.argmin(np.abs(Eg-1.0e11))
+    iplot1=np.argmin(np.abs(Eg-5.0e11))
     iplot2=np.argmin(np.abs(Eg-1.0e12))
 
     print(Eg[iplot1])
@@ -1009,17 +1042,18 @@ def plot_tau_ph(pars_nova, tau_ph1, tau_ph2, Eg, t):
     tau2_T09_test=-jnp.log(func_tau_ph2(pars_nova, tau_T09_test, t))
     
     print(iplot1, Eg[iplot1])
-    print(iplot2, Eg[iplot2])
+    print(iplot2, '%.2e' % Eg[iplot2])
 
-    ax.plot(t,tau_ph2[40,:],'g--',linewidth=3.0,label=r'${\rm This\, work\, (\tau_2)}$')
-    ax.plot(t,tau_T09[40,:],'r:',linewidth=3.0,label=r'${\rm Tatischeff\, 2009}$')
-    ax.plot(t,tau2_T09_test[40,:],'k-.',linewidth=3.0,label=r'${\rm Tatischeff\, 2009\, \tau_2}$')
+    ax.plot(t,tau_ph1[40,:],'r:',linewidth=3.0,label=r'${\rm \tau_1(E_\gamma=1\,TeV,t)}$')
+    ax.plot(t,tau_ph2[40,:],'g--',linewidth=3.0,label=r'${\rm \tau_2(E_\gamma=1\,TeV,t)}$')
+    # ax.plot(t,tau_T09[40,:],'r:',linewidth=3.0,label=r'${\rm Tatischeff\, 2009}$')
+    # ax.plot(t,tau2_T09_test[40,:],'k-.',linewidth=3.0,label=r'${\rm Tatischeff\, 2009\, \tau_2}$')
 
     ax.set_xlim(0.0,10.0)
     # ax.set_ylim(1.0e-2,2.0e1)
     ax.set_yscale('log')
     ax.set_xlabel(r'$t\, {\rm (day)}$',fontsize=fs)
-    ax.set_ylabel(r'$\tau_{\gamma\gamma}$',fontsize=fs)
+    ax.set_ylabel(r'$\tau$',fontsize=fs)
     for label_ax in (ax.get_xticklabels() + ax.get_yticklabels()):
         label_ax.set_fontsize(fs)
     ax.legend(loc='upper right', prop={"size":fs})
